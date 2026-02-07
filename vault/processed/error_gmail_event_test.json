@@ -1,0 +1,38 @@
+{
+  "timestamp": "2026-01-13T20:30:00Z",
+  "filename": "gmail_event_test.json",
+  "data": {
+    "id": "gmail-event-test-1",
+    "source": "gmail",
+    "event_type": "new_email",
+    "timestamp": "2026-01-13T20:30:00Z",
+    "normalized_data": {
+      "source_type": "gmail",
+      "event_type": "new_email",
+      "timestamp": "2026-01-13T20:30:00Z",
+      "subject": "Test Email for Processing",
+      "sender": "test@example.com",
+      "recipient": "user@gmail.com",
+      "body_preview": "This is a test email to verify the processing pipeline.",
+      "has_attachments": false,
+      "priority": "medium",
+      "gmail_specific_data": {
+        "thread_id": "thread_test_456",
+        "message_id": "msg_test_789",
+        "labels": ["inbox", "unread"]
+      }
+    },
+    "raw_data": {
+      "event_type": "new_email",
+      "timestamp": "2026-01-13T20:30:00Z",
+      "subject": "Test Email for Processing",
+      "sender": "test@example.com",
+      "recipient": "user@gmail.com",
+      "body_preview": "This is a test email to verify the processing pipeline.",
+      "has_attachments": false,
+      "priority": "medium"
+    },
+    "file_path": "inbox/gmail_event_test.json",
+    "status": "new"
+  }
+}

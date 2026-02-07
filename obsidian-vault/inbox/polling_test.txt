@@ -1,0 +1,5 @@
+# Polling Test File
+
+This file is created to test the polling-based file monitoring system.
+
+The polling monitor should detect this file and process it.

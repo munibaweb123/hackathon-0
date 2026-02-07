@@ -1,0 +1,140 @@
+# API Contract: Decision Skill Service
+
+openapi: 3.0.0
+info:
+  title: Decision Skill API
+  version: 1.0.0
+  description: API for the AI Decision Skills service
+
+paths:
+  /decision-skill/evaluate:
+    post:
+      summary: Evaluate options and make a decision
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DecisionContext'
+      responses:
+        '200':
+          description: Decision evaluation result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DecisionResult'
+        '400':
+          description: Invalid input data
+        '408':
+          description: Request timeout after 30 seconds
+        '500':
+          description: Internal server error
+
+  /decision-skill/configure:
+    post:
+      summary: Configure a decision skill
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DecisionSkillConfig'
+      responses:
+        '200':
+          description: Configuration updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DecisionSkill'
+
+components:
+  schemas:
+    DecisionContext:
+      type: object
+      properties:
+        skill_id:
+          type: string
+          description: ID of the decision skill to use
+        input_data:
+          type: object
+          description: Raw input data for the decision
+        constraints:
+          type: object
+          description: Constraints that apply to this decision
+        options:
+          type: array
+          items:
+            $ref: '#/components/schemas/DecisionOption'
+        criteria_weights:
+          type: object
+          description: Weights for different decision criteria
+      required:
+        - skill_id
+        - input_data
+        - options
+
+    DecisionOption:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unique identifier for the option
+        name:
+          type: string
+          description: Human-readable name of the option
+        description:
+          type: string
+          description: Detailed description of the option
+        attributes:
+          type: object
+          description: Additional attributes for evaluation
+
+    DecisionResult:
+      type: object
+      properties:
+        decision_id:
+          type: string
+          description: Unique identifier for this decision
+        selected_option:
+          $ref: '#/components/schemas/DecisionOption'
+        confidence:
+          type: number
+          format: float
+          minimum: 0.0
+          maximum: 1.0
+          description: Confidence level in the decision
+        evaluation_details:
+          type: object
+          description: Detailed breakdown of the evaluation
+        escalation_needed:
+          type: boolean
+          description: Whether human oversight is required
+        timestamp:
+          type: string
+          format: date-time
+          description: When the decision was made
+
+    DecisionSkillConfig:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Name of the decision skill
+        description:
+          type: string
+          description: Description of what the skill does
+        criteria_weights:
+          type: object
+          description: Default weights for decision criteria
+        confidence_threshold:
+          type: number
+          format: float
+          minimum: 0.0
+          maximum: 1.0
+          default: 0.7
+          description: Threshold for human escalation
+        escalation_rules:
+          type: array
+          items:
+            type: string
+          description: Rules that trigger human escalation

@@ -1,0 +1,28 @@
+{
+  "request_id": "3f4a73f1-b947-45c3-9587-897f8f4a5e1b",
+  "timestamp": "2026-01-12T02:13:05.635910",
+  "request_type": "document_analyze",
+  "description": "Processing final_test.txt with analyze",
+  "justification": "The document final_test.txt requires human review due to complexity.",
+  "options": [
+    {
+      "option_id": "approve",
+      "description": "Approve the operation",
+      "expected_outcome": "The operation will proceed as planned"
+    },
+    {
+      "option_id": "reject",
+      "description": "Reject the operation",
+      "expected_outcome": "The operation will be cancelled"
+    },
+    {
+      "option_id": "modify",
+      "description": "Modify the operation",
+      "expected_outcome": "The operation will be adjusted based on your input"
+    }
+  ],
+  "file_context": "obsidian-vault/inbox/final_test.txt",
+  "risk_level": "medium",
+  "urgency": "normal",
+  "created_by": "ai-employee"
+}

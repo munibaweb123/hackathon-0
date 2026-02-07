@@ -1,0 +1,11 @@
+# My Test Document
+
+  This is a test document for the AI Employee to process.
+
+  The AI Employee should detect this file and process it automatically.
+
+  - It will classify the document type
+  - Assess if it needs human approval
+  - Process it accordingly
+  - Move it to the appropriate folder
+  

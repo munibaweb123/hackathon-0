@@ -1,0 +1,90 @@
+# Environment variables
+.env
+*.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+.ENV
+.ENV.bak
+.env.bak
+*.swp
+
+# Virtual Environment
+venv/
+env/
+ENV/
+
+# Logs
+*.log
+logs/
+*.out
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Coverage reports
+.coverage
+htmlcov/
+.coverage.*
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Testing
+.pytest_cache/
+.pytest/
+.coverage*
+
+# Secrets and sensitive data
+secrets/
+credentials/
+*.key
+*.pem
+*.crt
+*.cert
+*.secret
+client-secret.json
+token.json
+gmail-token.json
+linkedin-token.json
+linkedin-posts.json
+.env.local
+
+# Local vault backups
+vault/backup/
+vault/*.bak
+vault/*.backup

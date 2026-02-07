@@ -1,0 +1,10 @@
+vault_path: "./obsidian-vault"
+input_folder: "inbox"
+processing_folder: "processing"
+pending_approval_folder: "pending-approval"
+completed_folder: "completed"
+rejected_folder: "rejected"
+archive_folder: "archive"
+error_folder: "error"
+log_directory: "./logs"
+watcher_interval: 5  # seconds

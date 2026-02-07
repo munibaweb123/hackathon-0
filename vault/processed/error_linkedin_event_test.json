@@ -1,0 +1,38 @@
+{
+  "timestamp": "2026-01-13T20:35:00Z",
+  "filename": "linkedin_event_test.json",
+  "data": {
+    "id": "linkedin-event-test-1",
+    "source": "linkedin",
+    "event_type": "profile_view",
+    "timestamp": "2026-01-13T20:35:00Z",
+    "normalized_data": {
+      "source_type": "linkedin",
+      "event_type": "profile_view",
+      "timestamp": "2026-01-13T20:35:00Z",
+      "actor_name": "John Doe",
+      "actor_profile_url": "https://linkedin.com/in/johndoe",
+      "activity_type": "profile_view",
+      "connection_status": "connection",
+      "message": "John Doe viewed your profile",
+      "priority": "low",
+      "linkedin_specific_data": {
+        "post_id": "",
+        "comment_id": "",
+        "reaction_type": ""
+      }
+    },
+    "raw_data": {
+      "event_type": "profile_view",
+      "timestamp": "2026-01-13T20:35:00Z",
+      "actor_name": "John Doe",
+      "actor_profile_url": "https://linkedin.com/in/johndoe",
+      "activity_type": "profile_view",
+      "connection_status": "connection",
+      "message": "John Doe viewed your profile",
+      "priority": "low"
+    },
+    "file_path": "inbox/linkedin_event_test.json",
+    "status": "new"
+  }
+}

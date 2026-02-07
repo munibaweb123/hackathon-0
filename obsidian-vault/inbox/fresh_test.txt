@@ -1,0 +1,8 @@
+# Fresh Test File
+
+  This is a brand new test file to see if the AI Employee detects it.
+
+  - Created after AI Employee started
+  - Should be detected by the file monitoring system
+  - Will be classified and processed accordingly
+  

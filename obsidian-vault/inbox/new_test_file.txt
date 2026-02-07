@@ -1,0 +1,10 @@
+# New Test File
+
+This is a new test file created while the AI Employee is running.
+
+The AI Employee should detect this file and process it automatically.
+
+- File type: text document
+- Expected behavior: Detect, classify, assess, and process
+- Possible outcomes: Auto-process or request approval based on content
+- Final destination: processing, completed, or pending-approval folder

@@ -1,0 +1,57 @@
+# File Processing API Contract
+openapi: 3.0.0
+info:
+  title: Personal AI Employee File Processing API
+  version: 1.0.0
+paths:
+  /files/{fileId}/process:
+    post:
+      summary: Process a file using Claude Code reasoning
+      parameters:
+        - name: fileId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                processing_type:
+                  type: string
+                  enum: [summarize, categorize, transform, analyze]
+                context:
+                  type: string
+                  description: Additional context for processing
+      responses:
+        '200':
+          description: Processing initiated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Operation'
+        '400':
+          description: Invalid request
+        '403':
+          description: File access denied
+        '500':
+          description: Internal server error
+components:
+  schemas:
+    Operation:
+      type: object
+      properties:
+        id:
+          type: string
+        status:
+          type: string
+          enum: [pending, in_progress, completed, failed, pending_approval]
+        file_id:
+          type: string
+        result:
+          type: string
+        requires_human_approval:
+          type: boolean

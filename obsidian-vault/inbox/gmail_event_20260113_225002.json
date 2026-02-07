@@ -1,0 +1,34 @@
+{
+  "timestamp": "2026-01-13T22:50:02.371299",
+  "filename": "gmail_event_20260113_225002.json",
+  "data": {
+    "source": "gmail",
+    "event_type": "new_email",
+    "raw_data": {
+      "event_type": "new_email",
+      "timestamp": "2026-01-13T17:50:02Z",
+      "subject": "Meeting Reminder",
+      "sender": "calendar-noreply@google.com",
+      "recipient": "mock@gmail.com",
+      "body_preview": "You have a meeting in 15 minutes...",
+      "has_attachments": false,
+      "priority": "medium"
+    },
+    "normalized_data": {
+      "source_type": "gmail",
+      "event_type": "new_email",
+      "timestamp": "2026-01-13T17:50:02Z",
+      "subject": "Meeting Reminder",
+      "sender": "calendar-noreply@google.com",
+      "recipient": "mock@gmail.com",
+      "body_preview": "You have a meeting in 15 minutes...",
+      "has_attachments": false,
+      "priority": "medium",
+      "gmail_specific_data": {
+        "thread_id": "",
+        "message_id": "",
+        "labels": []
+      }
+    }
+  }
+}

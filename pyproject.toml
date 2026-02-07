@@ -1,0 +1,29 @@
+[project]
+name = "personal-ai-employee"
+version = "0.1.0"
+description = "Personal AI Employee - a file-based autonomous system that operates within a local Obsidian vault environment"
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = [
+    "watchdog>=3.0.0",
+    "PyYAML>=6.0",
+    "colorama>=0.4.4",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "black>=22.0",
+    "flake8>=4.0",
+]
+
+[project.scripts]
+personal-ai-employee = "src.ai_employee:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]
+
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
