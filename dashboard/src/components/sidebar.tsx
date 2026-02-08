@@ -11,6 +11,10 @@ const navItems = [
   { href: "/approvals", label: "Approvals", icon: "🔐" },
   { href: "/gmail", label: "Gmail Events", icon: "✉" },
   { href: "/linkedin", label: "LinkedIn", icon: "💼" },
+  // Gold Tier
+  { href: "/xero", label: "Xero", icon: "💰" },
+  { href: "/social", label: "Social Media", icon: "📱" },
+  { href: "/briefings", label: "CEO Briefings", icon: "📊" },
   { href: "/audit", label: "Audit Logs", icon: "📋" },
   { href: "/settings", label: "Settings", icon: "⚙" },
 ];

@@ -1,0 +1,416 @@
+openapi: 3.0.3
+info:
+  title: Gold Tier Financial MCP Server API
+  version: 1.0.0
+  description: |
+    Financial domain MCP server handling Xero integration.
+    All write operations require valid approval tokens.
+
+servers:
+  - url: http://localhost:8001
+    description: Local financial MCP server
+
+paths:
+  /health:
+    get:
+      summary: Server health check
+      operationId: getHealth
+      tags: [Health]
+      responses:
+        '200':
+          description: Server healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /xero/connect:
+    post:
+      summary: Initiate Xero OAuth connection
+      operationId: connectXero
+      tags: [Xero]
+      responses:
+        '200':
+          description: OAuth URL for user authorization
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  authUrl:
+                    type: string
+                    format: uri
+                  state:
+                    type: string
+
+  /xero/callback:
+    get:
+      summary: OAuth callback handler
+      operationId: xeroCallback
+      tags: [Xero]
+      parameters:
+        - name: code
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: state
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Connection successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XeroConnectionStatus'
+
+  /xero/status:
+    get:
+      summary: Get Xero connection status
+      operationId: getXeroStatus
+      tags: [Xero]
+      responses:
+        '200':
+          description: Connection status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XeroConnectionStatus'
+
+  /xero/invoices:
+    get:
+      summary: List invoices from Xero
+      operationId: listInvoices
+      tags: [Xero]
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [DRAFT, SUBMITTED, AUTHORISED, PAID, VOIDED]
+        - name: fromDate
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: toDate
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Invoice list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Invoice'
+        '503':
+          description: Xero connection unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /xero/invoices/create:
+    post:
+      summary: Create a new invoice in Xero (requires approval)
+      operationId: createInvoice
+      tags: [Xero]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateInvoiceRequest'
+      responses:
+        '200':
+          description: Invoice created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Invoice'
+        '403':
+          description: Approval required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /xero/contacts:
+    get:
+      summary: List contacts from Xero
+      operationId: listContacts
+      tags: [Xero]
+      parameters:
+        - name: search
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Contact list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/XeroContact'
+
+  /xero/bank-transactions:
+    get:
+      summary: List bank transactions for categorization
+      operationId: listBankTransactions
+      tags: [Xero]
+      parameters:
+        - name: uncategorized
+          in: query
+          schema:
+            type: boolean
+            default: true
+      responses:
+        '200':
+          description: Transaction list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BankTransaction'
+
+  /xero/bank-transactions/{id}/categorize:
+    post:
+      summary: Categorize a bank transaction (requires approval)
+      operationId: categorizeTransaction
+      tags: [Xero]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CategorizeRequest'
+      responses:
+        '200':
+          description: Transaction categorized
+        '403':
+          description: Approval required
+
+  /xero/summary:
+    get:
+      summary: Get financial summary for CEO briefing
+      operationId: getFinancialSummary
+      tags: [Xero]
+      parameters:
+        - name: periodStart
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: periodEnd
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Financial summary
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FinancialSummary'
+
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy, unhealthy]
+        xeroConnected:
+          type: boolean
+        lastSync:
+          type: string
+          format: date-time
+
+    XeroConnectionStatus:
+      type: object
+      properties:
+        connected:
+          type: boolean
+        tenantId:
+          type: string
+        tenantName:
+          type: string
+        tokenExpiry:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [active, expired, auth_required, error]
+
+    Invoice:
+      type: object
+      properties:
+        invoiceId:
+          type: string
+        invoiceNumber:
+          type: string
+        contact:
+          $ref: '#/components/schemas/XeroContact'
+        status:
+          type: string
+          enum: [DRAFT, SUBMITTED, AUTHORISED, PAID, VOIDED]
+        total:
+          type: number
+        amountDue:
+          type: number
+        currency:
+          type: string
+        dueDate:
+          type: string
+          format: date
+        lineItems:
+          type: array
+          items:
+            $ref: '#/components/schemas/LineItem'
+
+    LineItem:
+      type: object
+      properties:
+        description:
+          type: string
+        quantity:
+          type: number
+        unitAmount:
+          type: number
+        accountCode:
+          type: string
+        taxType:
+          type: string
+
+    CreateInvoiceRequest:
+      type: object
+      required: [approvalRef, contactId, lineItems]
+      properties:
+        approvalRef:
+          type: string
+          description: Reference to approval file
+        contactId:
+          type: string
+        dueDate:
+          type: string
+          format: date
+        lineItems:
+          type: array
+          items:
+            $ref: '#/components/schemas/LineItem'
+        reference:
+          type: string
+
+    XeroContact:
+      type: object
+      properties:
+        contactId:
+          type: string
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        isCustomer:
+          type: boolean
+        isSupplier:
+          type: boolean
+
+    BankTransaction:
+      type: object
+      properties:
+        transactionId:
+          type: string
+        date:
+          type: string
+          format: date
+        amount:
+          type: number
+        description:
+          type: string
+        accountCode:
+          type: string
+        suggestedCategory:
+          type: string
+          description: AI-suggested category
+
+    CategorizeRequest:
+      type: object
+      required: [approvalRef, accountCode]
+      properties:
+        approvalRef:
+          type: string
+        accountCode:
+          type: string
+        description:
+          type: string
+
+    FinancialSummary:
+      type: object
+      properties:
+        revenue:
+          type: number
+        expenses:
+          type: number
+        cashFlow:
+          type: number
+        outstandingInvoices:
+          type: array
+          items:
+            type: object
+            properties:
+              invoiceId:
+                type: string
+              amount:
+                type: number
+              dueDate:
+                type: string
+                format: date
+              contactName:
+                type: string
+        varianceAlerts:
+          type: array
+          items:
+            type: object
+            properties:
+              metric:
+                type: string
+              changePct:
+                type: number
+              direction:
+                type: string
+                enum: [up, down]
+
+    ErrorResponse:
+      type: object
+      required: [error, message]
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+        timestamp:
+          type: string
+          format: date-time

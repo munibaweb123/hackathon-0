@@ -208,3 +208,12 @@ Wait for consent; never auto-create ADRs. Group related decisions (stacks, authe
 
 ## Code Standards
 See `.specify/memory/constitution.md` for code quality, testing, performance, security, and architecture principles.
+
+## Active Technologies
+- Python 3.8+ (backend/watchers), TypeScript/Node.js (Next.js 16 dashboard) (003-silver-tier-assistant)
+- File-based (Obsidian vault structure) — no database required (003-silver-tier-assistant)
+- Python 3.8+ (backend), TypeScript/Node.js (Next.js 16 dashboard) (004-gold-tier-autonomous)
+- File-based (Obsidian vault YAML/JSON/Markdown) (004-gold-tier-autonomous)
+
+## Recent Changes
+- 003-silver-tier-assistant: Added Python 3.8+ (backend/watchers), TypeScript/Node.js (Next.js 16 dashboard)

@@ -1,0 +1,120 @@
+# Silver + Gold Tier Schedule Configuration
+# This file defines scheduled tasks for the AI Employee
+
+schedules:
+  # Watcher polling schedules
+  gmail_poll:
+    id: gmail_poll
+    task_type: watcher_poll
+    target_id: gmail_watcher
+    schedule_type: interval
+    interval_seconds: 300  # Every 5 minutes
+    enabled: true
+    description: Poll Gmail for new emails
+
+  linkedin_poll:
+    id: linkedin_poll
+    task_type: watcher_poll
+    target_id: linkedin_watcher
+    schedule_type: interval
+    interval_seconds: 900  # Every 15 minutes
+    enabled: true
+    description: Poll LinkedIn for notifications
+
+  whatsapp_poll:
+    id: whatsapp_poll
+    task_type: watcher_poll
+    target_id: whatsapp_watcher
+    schedule_type: interval
+    interval_seconds: 30  # Every 30 seconds
+    enabled: true
+    description: Poll WhatsApp for new messages
+
+  # Gold Tier: CEO Briefing generation
+  ceo_briefing:
+    id: ceo_briefing
+    task_type: briefing_generation
+    target_id: ceo_briefing_skill
+    schedule_type: cron
+    cron_expression: "0 8 * * 0"  # 8 AM on Sundays
+    enabled: true
+    description: Generate weekly CEO briefing with financial and operational intelligence
+    config:
+      include_xero: true
+      include_social: true
+      include_pending_approvals: true
+      ai_insights: true
+
+  # Content generation schedules
+  daily_linkedin_post:
+    id: daily_linkedin_post
+    task_type: content_generation
+    target_id: linkedin_content_skill
+    schedule_type: cron
+    cron_expression: "0 9 * * *"  # 9 AM daily
+    enabled: true
+    description: Generate daily LinkedIn post for approval
+    config:
+      topics_rotation: true
+      require_approval: true
+
+  # Maintenance schedules
+  stale_approval_check:
+    id: stale_approval_check
+    task_type: cleanup
+    target_id: approval_monitor_skill
+    schedule_type: interval
+    interval_seconds: 3600  # Every hour
+    enabled: true
+    description: Check for approvals pending > 24 hours
+    config:
+      max_pending_hours: 24
+      send_reminder: true
+
+  health_check:
+    id: health_check
+    task_type: health_check
+    target_id: null  # System-wide
+    schedule_type: interval
+    interval_seconds: 60  # Every minute
+    enabled: true
+    description: Verify all watchers and services are healthy
+
+  vault_cleanup:
+    id: vault_cleanup
+    task_type: cleanup
+    target_id: vault_interface
+    schedule_type: cron
+    cron_expression: "0 0 * * 0"  # Midnight on Sundays
+    enabled: false  # Disabled by default
+    description: Archive old completed tasks and events
+    config:
+      archive_after_days: 30
+      delete_after_days: 90
+
+# Global scheduler settings
+settings:
+  # Scheduler behavior
+  start_on_boot: true
+  catch_up_missed: false  # Don't run missed jobs on restart
+  max_concurrent_jobs: 5
+  timezone: UTC
+
+  # Job persistence
+  persist_state: true
+  state_file: schedules_state.json
+
+  # Error handling
+  retry_failed_jobs: true
+  max_job_retries: 3
+  job_retry_delay: 300  # 5 minutes
+
+  # Logging
+  log_job_start: true
+  log_job_completion: true
+  log_job_errors: true
+
+# Metadata
+_version: "1.0.0"
+_created: "2026-02-08"
+_feature: "003-silver-tier-assistant"

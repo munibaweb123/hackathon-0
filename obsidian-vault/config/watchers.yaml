@@ -1,0 +1,71 @@
+# Silver Tier Watcher Configuration
+# This file defines the watchers that monitor external platforms
+
+watchers:
+  gmail:
+    id: gmail_watcher
+    type: gmail
+    enabled: true
+    polling_interval: 300  # 5 minutes in seconds
+    status: auth_required  # Will change to 'active' after OAuth
+    config:
+      # OAuth credentials loaded from environment variables
+      labels_to_watch:
+        - INBOX
+        - IMPORTANT
+      skip_labels:
+        - SPAM
+        - TRASH
+      max_results_per_poll: 50
+    mock_mode: false  # Set to true for testing without real credentials
+
+  linkedin:
+    id: linkedin_watcher
+    type: linkedin
+    enabled: true
+    polling_interval: 900  # 15 minutes in seconds
+    status: auth_required
+    config:
+      # OAuth credentials loaded from environment variables
+      notification_types:
+        - message
+        - connection_request
+        - mention
+        - post_reaction
+      max_results_per_poll: 25
+    mock_mode: false
+
+  whatsapp:
+    id: whatsapp_watcher
+    type: whatsapp
+    enabled: true
+    polling_interval: 30  # 30 seconds for near-real-time
+    status: auth_required
+    config:
+      # Playwright session configuration
+      session_file: whatsapp_session.json
+      headless: true  # Set to false for QR code scanning
+      browser: chromium
+      chats_to_monitor: []  # Empty = all chats, or list specific chat IDs
+    mock_mode: false
+
+# Global watcher settings
+settings:
+  # Retry configuration for failed polls
+  retry_on_error: true
+  max_retries: 3
+  retry_delay: 60  # seconds
+
+  # Event file configuration
+  event_file_format: markdown  # markdown or json
+  include_raw_data: true
+
+  # Error handling
+  fallback_to_mock_on_error: true
+  log_errors: true
+  alert_on_auth_failure: true
+
+# Metadata
+_version: "1.0.0"
+_created: "2026-02-08"
+_feature: "003-silver-tier-assistant"

@@ -1,77 +1,108 @@
 """
 Gmail Watcher Module
 
-This module monitors Gmail for new emails and creates structured files in the vault inbox.
-It follows the file-based approach without making external actions.
+This module monitors Gmail for new emails and creates structured event files
+in the vault inbox. Uses OAuth tokens from the dashboard's gmail-token.json
+for authentication. Falls back to mock mode if credentials unavailable.
+
+Silver Tier: Perception layer — creates EVENT files, never sends emails.
 """
 
 import time
 import os
-from typing import Dict, Any, Optional
+from typing import Dict, Any, List, Optional
 from watchers.watcher_base import WatcherBase
 from core.vault_interface import VaultInterface
 from core.logger import Logger
 import base64
 import json
+from pathlib import Path
+from datetime import datetime, timedelta
+import uuid
 
 
 class GmailWatcher(WatcherBase):
     """
-    Watches Gmail for new emails and creates structured files in the vault inbox.
-    Does not send emails or make other external actions - only monitors and creates files.
+    Watches Gmail for new emails and creates structured event files in the vault inbox.
+    Uses OAuth tokens shared with the Next.js dashboard (gmail-token.json).
+    Falls back to mock mode when credentials are unavailable.
     """
 
     def __init__(self, vault_interface: VaultInterface, logger: Logger,
-                 check_interval: int = 300):  # 5 minutes default
-        """
-        Initialize the Gmail watcher.
-
-        Args:
-            vault_interface: Interface for vault operations
-            logger: Logger instance for auditability
-            check_interval: Interval in seconds between checks
-        """
+                 check_interval: int = 300, mock_mode: bool = False):
         super().__init__("gmail", vault_interface, logger)
         self.check_interval = check_interval
         self.last_check_time = 0
+        self.mock_mode = mock_mode
+        self.last_history_id = None
 
         # Configuration from environment
-        self.email_account = os.getenv('GMAIL_ACCOUNT', 'your-email@gmail.com')
-        self.oauth_token = os.getenv('GMAIL_OAUTH_TOKEN', None)
+        self.email_account = os.getenv('GMAIL_USER_EMAIL', os.getenv('GMAIL_ACCOUNT', ''))
+        self.client_id = os.getenv('GMAIL_CLIENT_ID', '')
+        self.client_secret = os.getenv('GMAIL_CLIENT_SECRET', '')
 
-        # Initialize Gmail API client if available
+        # Token file paths — shared with Next.js dashboard
+        self.token_path = self._find_token_file()
+
+        # Initialize Gmail API client
         self.gmail_service = None
-        self._initialize_gmail_client()
+        if not self.mock_mode:
+            self._initialize_gmail_client()
+
+    def _find_token_file(self) -> Optional[Path]:
+        """Find the gmail-token.json file (shared with dashboard)."""
+        search_paths = [
+            Path(os.getcwd()) / "dashboard" / "gmail-token.json",
+            Path(os.getcwd()) / "gmail-token.json",
+            Path(os.getcwd()) / "token.json",
+        ]
+        for p in search_paths:
+            if p.exists():
+                return p
+        return None
 
     def _initialize_gmail_client(self):
-        """Initialize the Gmail API client if credentials are available."""
+        """Initialize the Gmail API client using dashboard's OAuth tokens."""
         try:
-            # Check if Google API libraries are installed
             from google.auth.transport.requests import Request
             from google.oauth2.credentials import Credentials
-            from google_auth_oauthlib.flow import InstalledAppFlow
             from googleapiclient.discovery import build
 
-            # Scopes for reading Gmail
             SCOPES = ['https://www.googleapis.com/auth/gmail.readonly']
 
             creds = None
-            # The file token.json stores the user's access and refresh tokens.
-            if os.path.exists('token.json'):
-                creds = Credentials.from_authorized_user_file('token.json', SCOPES)
+            if self.token_path and self.token_path.exists():
+                # Load tokens from dashboard's token file
+                token_data = json.loads(self.token_path.read_text())
+                creds = Credentials(
+                    token=token_data.get('access_token') or token_data.get('token'),
+                    refresh_token=token_data.get('refresh_token'),
+                    token_uri='https://oauth2.googleapis.com/token',
+                    client_id=self.client_id,
+                    client_secret=self.client_secret,
+                    scopes=SCOPES,
+                )
 
-            # If there are no (valid) credentials available, let the user log in.
             if not creds or not creds.valid:
                 if creds and creds.expired and creds.refresh_token:
                     creds.refresh(Request())
+                    # Save refreshed token back
+                    if self.token_path:
+                        token_data = {
+                            'access_token': creds.token,
+                            'refresh_token': creds.refresh_token,
+                            'token_uri': creds.token_uri,
+                            'expiry': creds.expiry.isoformat() if creds.expiry else None,
+                        }
+                        self.token_path.write_text(json.dumps(token_data, indent=2))
                 else:
-                    # If credentials not available, we'll use mock mode
                     self.logger.log_system_event(
                         event_type="gmail_init_warning",
                         component="gmail_watcher",
-                        message="Gmail credentials not found, running in mock mode",
-                        details={"account": self.email_account}
+                        message="Gmail credentials not found or invalid, running in mock mode",
+                        details={"account": self.email_account, "token_path": str(self.token_path)}
                     )
+                    self.mock_mode = True
                     return
 
             self.gmail_service = build('gmail', 'v1', credentials=creds)
@@ -86,8 +117,9 @@ class GmailWatcher(WatcherBase):
                 event_type="gmail_init_error",
                 component="gmail_watcher",
                 message="Google API libraries not installed, running in mock mode",
-                details={"missing_libraries": ["google-api-python-client", "google-auth-oauthlib", "google-auth-httplib2"]}
+                details={}
             )
+            self.mock_mode = True
         except Exception as e:
             self.logger.log_system_event(
                 event_type="gmail_init_error",
@@ -95,40 +127,42 @@ class GmailWatcher(WatcherBase):
                 message=f"Error initializing Gmail API client: {e}",
                 details={"account": self.email_account}
             )
+            self.mock_mode = True
 
     def detect_events(self) -> Optional[Dict[str, Any]]:
         """
-        Detect new emails in Gmail (real implementation if API is available).
+        Detect new emails in Gmail. Uses real API if authenticated, mock otherwise.
 
         Returns:
             Dictionary with email data or None if no new emails
         """
-        if self.gmail_service:
-            return self._detect_events_real()
-        else:
+        if self.mock_mode or not self.gmail_service:
             return self._detect_events_mock()
+        return self._detect_events_real()
 
     def _detect_events_real(self) -> Optional[Dict[str, Any]]:
         """
-        Real implementation to detect new emails using Gmail API.
+        Detect new emails using Gmail API with incremental sync.
 
         Returns:
             Dictionary with email data or None if no new emails
         """
         try:
-            import datetime
-            from email.utils import parsedate_to_datetime
+            # Use incremental sync if we have a history ID
+            if self.last_history_id:
+                return self._detect_via_history()
 
-            # Calculate time threshold (5 minutes ago)
-            time_threshold = (datetime.datetime.utcnow() - datetime.timedelta(minutes=5)).strftime('%Y/%m/%d %H:%M:%S')
-
-            # Query for unread emails received in the last 5 minutes
-            query = f'after:{time_threshold} newer_than:5m'
+            # Otherwise, query for recent unread emails
+            interval_mins = max(self.check_interval // 60, 1)
+            query = f'is:unread newer_than:{interval_mins}m'
             results = self.gmail_service.users().messages().list(
                 userId='me', q=query, maxResults=10).execute()
             messages = results.get('messages', [])
 
             if not messages:
+                # Store current history ID for incremental sync
+                profile = self.gmail_service.users().getProfile(userId='me').execute()
+                self.last_history_id = profile.get('historyId')
                 return None
 
             # Process the most recent message
@@ -136,28 +170,59 @@ class GmailWatcher(WatcherBase):
             message = self.gmail_service.users().messages().get(
                 userId='me', id=message_id, format='full').execute()
 
+            # Store history ID for next poll
+            self.last_history_id = message.get('historyId')
+
             # Extract email data
             headers = message['payload']['headers']
             subject = next((hdr['value'] for hdr in headers if hdr['name'] == 'Subject'), 'No Subject')
             sender = next((hdr['value'] for hdr in headers if hdr['name'] == 'From'), 'Unknown Sender')
             date = next((hdr['value'] for hdr in headers if hdr['name'] == 'Date'), '')
+            thread_id = message.get('threadId', '')
 
-            # Try to get body preview
             body_preview = self._extract_email_body(message)
-
-            # Determine priority based on subject keywords
             priority = self._determine_email_priority(subject, body_preview)
 
+            # Parse sender name and email
+            sender_name = sender.split('<')[0].strip().strip('"') if '<' in sender else sender
+            sender_email = sender.split('<')[1].rstrip('>') if '<' in sender else sender
+
             email_data = {
-                "event_type": "new_email",
-                "timestamp": date,
-                "subject": subject,
-                "sender": sender,
-                "recipient": self.email_account,
-                "body_preview": body_preview,
-                "has_attachments": len(message.get('payload', {}).get('parts', [])) > 1,
+                "id": str(uuid.uuid4()),
+                "source_type": "gmail",
+                "source_id": message_id,
+                "event_type": "email_received",
+                "timestamp": datetime.utcnow().isoformat(),
+                "detected_at": datetime.utcnow().isoformat(),
                 "priority": priority,
-                "message_id": message_id
+                "processing_status": "new",
+                "raw_data": {
+                    "subject": subject,
+                    "sender": sender,
+                    "date": date,
+                    "body_preview": body_preview,
+                    "has_attachments": len(message.get('payload', {}).get('parts', [])) > 1,
+                    "message_id": message_id,
+                    "thread_id": thread_id,
+                    "labels": message.get('labelIds', []),
+                },
+                "normalized_data": {
+                    "summary": f"Email from {sender_name}: {subject}",
+                    "sender": {
+                        "name": sender_name,
+                        "identifier": sender_email,
+                    },
+                    "content": {
+                        "subject": subject,
+                        "body": body_preview,
+                        "attachments": [],
+                    },
+                    "metadata": {
+                        "thread_id": thread_id,
+                        "is_reply": bool(thread_id and len(messages) > 1),
+                        "urgency_indicators": self._get_urgency_indicators(subject, body_preview),
+                    }
+                }
             }
 
             return email_data
@@ -169,8 +234,82 @@ class GmailWatcher(WatcherBase):
                 message=f"Error detecting emails via API: {e}",
                 details={}
             )
-            # Fall back to mock implementation
+            self.mock_mode = True
             return self._detect_events_mock()
+
+    def _detect_via_history(self) -> Optional[Dict[str, Any]]:
+        """Use Gmail history API for incremental sync."""
+        try:
+            history = self.gmail_service.users().history().list(
+                userId='me',
+                startHistoryId=self.last_history_id,
+                historyTypes=['messageAdded'],
+            ).execute()
+
+            changes = history.get('history', [])
+            if not changes:
+                self.last_history_id = history.get('historyId', self.last_history_id)
+                return None
+
+            # Get the first new message
+            for change in changes:
+                for msg_added in change.get('messagesAdded', []):
+                    msg = msg_added.get('message', {})
+                    if 'INBOX' in msg.get('labelIds', []):
+                        # Full fetch of this message
+                        self.last_history_id = history.get('historyId')
+                        message = self.gmail_service.users().messages().get(
+                            userId='me', id=msg['id'], format='full').execute()
+
+                        headers = message['payload']['headers']
+                        subject = next((h['value'] for h in headers if h['name'] == 'Subject'), 'No Subject')
+                        sender = next((h['value'] for h in headers if h['name'] == 'From'), 'Unknown')
+                        body_preview = self._extract_email_body(message)
+                        priority = self._determine_email_priority(subject, body_preview)
+                        sender_name = sender.split('<')[0].strip().strip('"') if '<' in sender else sender
+                        sender_email = sender.split('<')[1].rstrip('>') if '<' in sender else sender
+
+                        return {
+                            "id": str(uuid.uuid4()),
+                            "source_type": "gmail",
+                            "source_id": msg['id'],
+                            "event_type": "email_received",
+                            "timestamp": datetime.utcnow().isoformat(),
+                            "detected_at": datetime.utcnow().isoformat(),
+                            "priority": priority,
+                            "processing_status": "new",
+                            "raw_data": {
+                                "subject": subject, "sender": sender,
+                                "body_preview": body_preview,
+                                "message_id": msg['id'],
+                                "thread_id": message.get('threadId', ''),
+                                "labels": message.get('labelIds', []),
+                            },
+                            "normalized_data": {
+                                "summary": f"Email from {sender_name}: {subject}",
+                                "sender": {"name": sender_name, "identifier": sender_email},
+                                "content": {"subject": subject, "body": body_preview, "attachments": []},
+                                "metadata": {
+                                    "thread_id": message.get('threadId', ''),
+                                    "is_reply": False,
+                                    "urgency_indicators": self._get_urgency_indicators(subject, body_preview),
+                                }
+                            }
+                        }
+
+            self.last_history_id = history.get('historyId', self.last_history_id)
+            return None
+
+        except Exception:
+            # History ID might be too old, reset to full query
+            self.last_history_id = None
+            return self._detect_events_real()
+
+    def _get_urgency_indicators(self, subject: str, body: str) -> list:
+        """Extract urgency keyword indicators."""
+        keywords = ['urgent', 'asap', 'important', 'immediate', 'critical', 'deadline', 'emergency']
+        content = (subject + ' ' + body).lower()
+        return [k for k in keywords if k in content]
 
     def _extract_email_body(self, message: Dict[str, Any]) -> str:
         """
@@ -260,32 +399,47 @@ class GmailWatcher(WatcherBase):
         return 'low'
 
     def _detect_events_mock(self) -> Optional[Dict[str, Any]]:
-        """
-        Mock implementation for demonstration purposes.
-
-        Returns:
-            Dictionary with mock email data or None if no new emails
-        """
-        # Simulate checking for new emails
+        """Mock implementation for testing without credentials."""
         current_time = time.time()
 
-        # For demo purposes, let's say we find a new email every 10 minutes
-        if current_time - self.last_check_time > 600:  # 10 minutes
+        # Simulate new email every 10 minutes in mock mode
+        if current_time - self.last_check_time > 600:
             self.last_check_time = current_time
+            event_id = str(uuid.uuid4())
 
-            # Mock email data
-            email_data = {
-                "event_type": "new_email",
-                "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(current_time)),
-                "subject": "Meeting Reminder",
-                "sender": "calendar-noreply@google.com",
-                "recipient": self.email_account,
-                "body_preview": "You have a meeting in 15 minutes...",
-                "has_attachments": False,
-                "priority": "medium"
+            return {
+                "id": event_id,
+                "source_type": "gmail",
+                "source_id": f"mock_msg_{event_id[:8]}",
+                "event_type": "email_received",
+                "timestamp": datetime.utcnow().isoformat(),
+                "detected_at": datetime.utcnow().isoformat(),
+                "priority": "medium",
+                "processing_status": "new",
+                "raw_data": {
+                    "subject": "Meeting Reminder",
+                    "sender": "calendar-noreply@google.com",
+                    "body_preview": "You have a meeting in 15 minutes...",
+                    "has_attachments": False,
+                    "message_id": f"mock_{event_id[:8]}",
+                    "thread_id": "",
+                    "labels": ["INBOX"],
+                },
+                "normalized_data": {
+                    "summary": "Email from Google Calendar: Meeting Reminder",
+                    "sender": {"name": "Google Calendar", "identifier": "calendar-noreply@google.com"},
+                    "content": {
+                        "subject": "Meeting Reminder",
+                        "body": "You have a meeting in 15 minutes...",
+                        "attachments": [],
+                    },
+                    "metadata": {
+                        "thread_id": "",
+                        "is_reply": False,
+                        "urgency_indicators": ["meeting"],
+                    }
+                }
             }
-
-            return email_data
 
         return None
 
@@ -331,37 +485,28 @@ class GmailWatcher(WatcherBase):
 
     def poll_gmail(self) -> bool:
         """
-        Poll Gmail for new emails and create structured files.
+        Poll Gmail for new emails and create structured event files in vault.
 
         Returns:
             True if polling was successful, False otherwise
         """
         try:
-            # Detect events
             event_data = self.detect_events()
 
             if event_data:
-                # Create structured file in vault
-                file_path = self.create_structured_file(event_data)
+                # Write event file to vault inbox using vault interface
+                file_path = self.vault_interface.create_event_file(event_data)
 
                 if file_path:
                     self.logger.log_system_event(
                         event_type="gmail_poll_success",
                         component="gmail_watcher",
-                        message="Successfully processed new email",
-                        details={"file_path": file_path}
+                        message=f"New email event created: {event_data.get('normalized_data', {}).get('summary', '')}",
+                        details={"file_path": str(file_path), "event_id": event_data.get("id")}
                     )
                     return True
-                else:
-                    self.logger.log_system_event(
-                        event_type="gmail_processing_error",
-                        component="gmail_watcher",
-                        message="Failed to create structured file for email",
-                        details={"email_data": event_data}
-                    )
-                    return False
 
-            # No new emails detected
+            # No new emails — still a successful poll
             return True
 
         except Exception as e:

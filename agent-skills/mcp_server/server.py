@@ -3,20 +3,215 @@ MCP Server Module
 
 This module implements the MCP (Multi-Computer Protocol) server for controlled external actions.
 It provides endpoints for executing approved actions with security validations.
+
+Silver Tier Extensions:
+- Error handling middleware with structured error responses
+- Request/response logging
+- Rate limiting support
+- Health check endpoint
+
+Gold Tier Extensions:
+- Coordinator registration for multi-MCP architecture
+- Action execution endpoint for coordinator routing
+- Domain identification (communication domain)
 """
 
 import asyncio
 import json
+import traceback
 from datetime import datetime, timedelta
 from typing import Dict, Any, Optional
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Request, Response
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 import uvicorn
 import threading
 import time
 import uuid
-from mcp_server.approval_validator import MCPServerApprovalValidator
-from core.logger import Logger
+
+try:
+    from mcp_server.approval_validator import MCPServerApprovalValidator
+except ImportError:
+    MCPServerApprovalValidator = None
+
+try:
+    from core.logger import Logger
+except ImportError:
+    Logger = None
+
+
+# Error response models
+class ErrorResponse(BaseModel):
+    """Standard error response."""
+    error: str
+    message: str
+    details: Optional[Dict[str, Any]] = None
+    timestamp: str = None
+    request_id: Optional[str] = None
+
+    def __init__(self, **data):
+        if "timestamp" not in data or data["timestamp"] is None:
+            data["timestamp"] = datetime.utcnow().isoformat()
+        super().__init__(**data)
+
+
+class MCPException(Exception):
+    """Base exception for MCP server errors."""
+    def __init__(
+        self,
+        error: str,
+        message: str,
+        status_code: int = 500,
+        details: Optional[Dict[str, Any]] = None
+    ):
+        self.error = error
+        self.message = message
+        self.status_code = status_code
+        self.details = details or {}
+        super().__init__(message)
+
+
+class ApprovalRequiredException(MCPException):
+    """Raised when action requires valid approval."""
+    def __init__(self, message: str = "Action requires valid approval token"):
+        super().__init__(
+            error="approval_required",
+            message=message,
+            status_code=403
+        )
+
+
+class RateLimitedException(MCPException):
+    """Raised when rate limit is exceeded."""
+    def __init__(self, retry_after: int = 3600):
+        super().__init__(
+            error="rate_limited",
+            message=f"Rate limit exceeded. Retry after {retry_after} seconds.",
+            status_code=429,
+            details={"retry_after": retry_after}
+        )
+
+
+class SessionUnavailableException(MCPException):
+    """Raised when required session is not available."""
+    def __init__(self, service: str):
+        super().__init__(
+            error="session_unavailable",
+            message=f"{service} session not active. Re-authentication required.",
+            status_code=503,
+            details={"service": service}
+        )
+
+
+class ExecutionFailedException(MCPException):
+    """Raised when action execution fails."""
+    def __init__(self, message: str, external_error: Optional[str] = None):
+        super().__init__(
+            error="execution_failed",
+            message=message,
+            status_code=500,
+            details={"external_error": external_error} if external_error else {}
+        )
+
+
+def create_error_handler_middleware(logger: Optional[Any] = None):
+    """Create error handling middleware for the FastAPI app."""
+
+    async def error_handler_middleware(request: Request, call_next):
+        request_id = str(uuid.uuid4())[:8]
+        start_time = time.time()
+
+        try:
+            # Add request ID to state
+            request.state.request_id = request_id
+
+            response = await call_next(request)
+
+            # Log successful requests
+            duration_ms = (time.time() - start_time) * 1000
+            if logger:
+                logger.log_system_event(
+                    event_type="mcp_request",
+                    component="mcp_server",
+                    message=f"{request.method} {request.url.path} - {response.status_code}",
+                    details={
+                        "request_id": request_id,
+                        "method": request.method,
+                        "path": request.url.path,
+                        "status_code": response.status_code,
+                        "duration_ms": round(duration_ms, 2)
+                    }
+                )
+
+            return response
+
+        except MCPException as e:
+            # Handle known MCP exceptions
+            error_response = ErrorResponse(
+                error=e.error,
+                message=e.message,
+                details=e.details,
+                request_id=request_id
+            )
+
+            if logger:
+                logger.log_system_event(
+                    event_type="mcp_error",
+                    component="mcp_server",
+                    message=f"MCP error: {e.error} - {e.message}",
+                    details={
+                        "request_id": request_id,
+                        "error": e.error,
+                        "status_code": e.status_code
+                    }
+                )
+
+            return JSONResponse(
+                status_code=e.status_code,
+                content=error_response.model_dump()
+            )
+
+        except HTTPException as e:
+            # Handle FastAPI HTTP exceptions
+            error_response = ErrorResponse(
+                error="http_error",
+                message=str(e.detail),
+                request_id=request_id
+            )
+
+            return JSONResponse(
+                status_code=e.status_code,
+                content=error_response.model_dump()
+            )
+
+        except Exception as e:
+            # Handle unexpected exceptions
+            error_response = ErrorResponse(
+                error="internal_error",
+                message="An unexpected error occurred",
+                details={"type": type(e).__name__},
+                request_id=request_id
+            )
+
+            if logger:
+                logger.log_system_event(
+                    event_type="mcp_error",
+                    component="mcp_server",
+                    message=f"Unhandled exception: {str(e)}",
+                    details={
+                        "request_id": request_id,
+                        "exception_type": type(e).__name__,
+                        "traceback": traceback.format_exc()
+                    }
+                )
+
+            return JSONResponse(
+                status_code=500,
+                content=error_response.model_dump()
+            )
+
+    return error_handler_middleware
 
 
 class ExecuteActionRequest(BaseModel):
@@ -39,7 +234,7 @@ class MCPServer:
     Ensures that only approved actions are executed with proper validation.
     """
 
-    def __init__(self, host: str = "localhost", port: int = 8000, logger: Optional[Logger] = None):
+    def __init__(self, host: str = "localhost", port: int = 8000, logger: Optional[Any] = None):
         """
         Initialize the MCP server.
 
@@ -50,43 +245,179 @@ class MCPServer:
         """
         self.host = host
         self.port = port
-        self.app = FastAPI(title="MCP Server", version="1.0.0")
+        self.app = FastAPI(
+            title="Silver Tier MCP Server",
+            version="1.0.0",
+            description="Model Context Protocol Server for controlled external actions"
+        )
         self.running = False
         self.logger = logger
-        self.approval_validator = MCPServerApprovalValidator(logger) if logger else None
+        self.start_time = datetime.utcnow()
 
-        # In-memory storage for execution logs (in production, use a proper database)
+        # Initialize approval validator if available
+        if MCPServerApprovalValidator and logger:
+            self.approval_validator = MCPServerApprovalValidator(logger)
+        else:
+            self.approval_validator = None
+
+        # In-memory storage for execution logs and action results
         self.execution_logs = {}
+        self.action_results = {}
+
+        # Service connection status
+        self.service_status = {
+            "gmail": {"status": "disconnected", "last_activity": None, "error_message": None},
+            "linkedin": {"status": "disconnected", "last_activity": None, "error_message": None},
+            "whatsapp": {"status": "disconnected", "last_activity": None, "error_message": None},
+        }
 
         # Define allowed and disallowed actions
         self.allowed_actions = [
-            "email_send", "linkedin_post", "notification_send",
-            "file_create_external", "calendar_event_create"
+            "email_send", "linkedin_post", "whatsapp_reply",
+            "notification_send", "file_create_external", "calendar_event_create"
         ]
         self.disallowed_actions = [
             "payment", "data_deletion", "irreversible_operation",
             "system_configuration_change", "user_privilege_modification"
         ]
 
+        # Add error handling middleware
+        self.app.middleware("http")(create_error_handler_middleware(logger))
+
+        # Add CORS middleware for dashboard access
+        self.app.add_middleware(
+            CORSMiddleware,
+            allow_origins=["http://localhost:3000"],
+            allow_credentials=True,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
+
         # Initialize routes
         self._setup_routes()
 
     def _setup_routes(self):
         """Setup the API routes for the MCP server."""
+
+        @self.app.get("/health")
+        async def health_check():
+            """Health check endpoint for coordinator health monitoring."""
+            return {
+                "status": "healthy",
+                "domain": "communication",
+                "timestamp": datetime.utcnow().isoformat(),
+                "version": "1.0.0"
+            }
+
+        @self.app.post("/action/execute")
+        async def action_execute(request: dict):
+            """
+            Execute an action routed from the coordinator.
+
+            Gold Tier: This endpoint is called by the coordinator for
+            actions in the communication domain (email, LinkedIn, WhatsApp).
+            """
+            action_type = request.get("actionType", "")
+            approval_ref = request.get("approvalRef", "")
+            payload = request.get("payload", {})
+
+            # Map coordinator action types to internal action types
+            action_map = {
+                "email.send": "email_send",
+                "linkedin.post": "linkedin_post",
+                "whatsapp.reply": "whatsapp_reply",
+                "gmail.send": "email_send",
+            }
+
+            internal_action = action_map.get(action_type, action_type)
+
+            # Execute the action
+            try:
+                result = self._execute_action_by_type(internal_action, payload)
+                return {
+                    "success": True,
+                    "result": result,
+                    "actionType": action_type,
+                    "approvalRef": approval_ref,
+                }
+            except Exception as e:
+                return {
+                    "success": False,
+                    "error": str(e),
+                    "actionType": action_type,
+                    "approvalRef": approval_ref,
+                }
+
+        @self.app.get("/status")
+        async def get_status():
+            """Get detailed server status including connected services."""
+            uptime = (datetime.utcnow() - self.start_time).total_seconds()
+            pending_approvals = len([
+                r for r in self.action_results.values()
+                if r.get("status") == "pending"
+            ])
+            executed_today = len([
+                r for r in self.action_results.values()
+                if r.get("executed_at", "").startswith(datetime.utcnow().strftime("%Y-%m-%d"))
+            ])
+
+            return {
+                "status": self._calculate_overall_status(),
+                "uptime": int(uptime),
+                "services": self.service_status,
+                "pending_approvals": pending_approvals,
+                "executed_today": executed_today
+            }
+
         @self.app.post("/execute/action")
         async def execute_action(request: ExecuteActionRequest):
             """Execute an approved action."""
             return self._handle_execute_action(request)
 
-        @self.app.get("/status")
-        async def get_status():
-            """Get the current status of the MCP server."""
-            return self._handle_get_status()
-
         @self.app.post("/validate/approval")
         async def validate_approval(request: ValidateApprovalRequest):
             """Validate that an approval token is valid and has not expired."""
             return self._handle_validate_approval(request)
+
+        @self.app.get("/actions/{action_id}")
+        async def get_action_result(action_id: str):
+            """Retrieve the result of a previously executed action."""
+            if action_id not in self.action_results:
+                raise HTTPException(status_code=404, detail="Action not found")
+            return self.action_results[action_id]
+
+    def _calculate_overall_status(self) -> str:
+        """Calculate overall server status based on service health."""
+        connected_count = sum(
+            1 for s in self.service_status.values()
+            if s["status"] == "connected"
+        )
+        error_count = sum(
+            1 for s in self.service_status.values()
+            if s["status"] == "error"
+        )
+
+        if error_count > 0:
+            return "degraded"
+        elif connected_count == 0:
+            return "unhealthy"
+        elif connected_count < len(self.service_status):
+            return "degraded"
+        return "healthy"
+
+    def update_service_status(
+        self,
+        service: str,
+        status: str,
+        error_message: Optional[str] = None
+    ):
+        """Update the status of a service."""
+        if service in self.service_status:
+            self.service_status[service] = {
+                "status": status,
+                "last_activity": datetime.utcnow().isoformat(),
+                "error_message": error_message
+            }
 
     def _handle_execute_action(self, request: ExecuteActionRequest):
         """Handle the execute action request."""

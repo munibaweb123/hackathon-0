@@ -1,0 +1,451 @@
+openapi: 3.1.0
+info:
+  title: Silver Tier MCP Server API
+  description: |
+    Model Context Protocol (MCP) Server for the Silver Tier AI Employee.
+    Provides controlled execution of approved external actions.
+
+    All action endpoints require valid approval tokens obtained through
+    the human-in-the-loop approval workflow.
+  version: 1.0.0
+  contact:
+    name: AI Employee Project
+
+servers:
+  - url: http://localhost:8000
+    description: Local development server
+
+tags:
+  - name: Actions
+    description: Execute approved external actions
+  - name: Approvals
+    description: Approval validation and status
+  - name: Status
+    description: Server health and monitoring
+
+paths:
+  /health:
+    get:
+      tags: [Status]
+      summary: Health check
+      description: Check if MCP server is running and healthy
+      operationId: healthCheck
+      responses:
+        '200':
+          description: Server is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /status:
+    get:
+      tags: [Status]
+      summary: Server status
+      description: Get detailed server status including connected services
+      operationId: getStatus
+      responses:
+        '200':
+          description: Server status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatusResponse'
+
+  /validate/approval:
+    post:
+      tags: [Approvals]
+      summary: Validate approval token
+      description: Check if an approval token is valid and not expired
+      operationId: validateApproval
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ValidateApprovalRequest'
+      responses:
+        '200':
+          description: Approval validation result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApprovalValidationResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /execute/email_send:
+    post:
+      tags: [Actions]
+      summary: Send email via Gmail
+      description: |
+        Execute an approved email send action.
+        Requires valid approval token and Gmail OAuth credentials.
+      operationId: executeEmailSend
+      security:
+        - ApprovalToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmailSendRequest'
+      responses:
+        '200':
+          description: Email sent successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/ApprovalRequired'
+        '500':
+          $ref: '#/components/responses/ExecutionFailed'
+
+  /execute/linkedin_post:
+    post:
+      tags: [Actions]
+      summary: Publish LinkedIn post
+      description: |
+        Execute an approved LinkedIn post action.
+        Requires valid approval token and LinkedIn OAuth credentials.
+      operationId: executeLinkedInPost
+      security:
+        - ApprovalToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LinkedInPostRequest'
+      responses:
+        '200':
+          description: Post published successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/ApprovalRequired'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/ExecutionFailed'
+
+  /execute/whatsapp_reply:
+    post:
+      tags: [Actions]
+      summary: Send WhatsApp reply
+      description: |
+        Execute an approved WhatsApp message reply.
+        Requires valid approval token and active WhatsApp Web session.
+      operationId: executeWhatsAppReply
+      security:
+        - ApprovalToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WhatsAppReplyRequest'
+      responses:
+        '200':
+          description: Reply sent successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/ApprovalRequired'
+        '503':
+          $ref: '#/components/responses/SessionUnavailable'
+
+  /actions/{action_id}:
+    get:
+      tags: [Actions]
+      summary: Get action result
+      description: Retrieve the result of a previously executed action
+      operationId: getActionResult
+      parameters:
+        - name: action_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Action result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResult'
+        '404':
+          description: Action not found
+
+components:
+  securitySchemes:
+    ApprovalToken:
+      type: apiKey
+      in: header
+      name: X-Approval-Token
+      description: Approval ID from an approved APPROVAL_REQUIRED file
+
+  schemas:
+    HealthResponse:
+      type: object
+      required: [status, timestamp]
+      properties:
+        status:
+          type: string
+          enum: [healthy, degraded, unhealthy]
+        timestamp:
+          type: string
+          format: date-time
+        version:
+          type: string
+
+    StatusResponse:
+      type: object
+      required: [status, services, uptime]
+      properties:
+        status:
+          type: string
+          enum: [healthy, degraded, unhealthy]
+        uptime:
+          type: integer
+          description: Server uptime in seconds
+        services:
+          type: object
+          properties:
+            gmail:
+              $ref: '#/components/schemas/ServiceStatus'
+            linkedin:
+              $ref: '#/components/schemas/ServiceStatus'
+            whatsapp:
+              $ref: '#/components/schemas/ServiceStatus'
+        pending_approvals:
+          type: integer
+        executed_today:
+          type: integer
+
+    ServiceStatus:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [connected, disconnected, auth_required, error]
+        last_activity:
+          type: string
+          format: date-time
+        error_message:
+          type: string
+
+    ValidateApprovalRequest:
+      type: object
+      required: [approval_id]
+      properties:
+        approval_id:
+          type: string
+          format: uuid
+          description: ID of the approval request to validate
+
+    ApprovalValidationResponse:
+      type: object
+      required: [valid, approval_id]
+      properties:
+        valid:
+          type: boolean
+        approval_id:
+          type: string
+        status:
+          type: string
+          enum: [pending, approved, rejected, expired]
+        action_type:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+        reason:
+          type: string
+          description: Why validation failed (if invalid)
+
+    EmailSendRequest:
+      type: object
+      required: [approval_id, to, subject, body]
+      properties:
+        approval_id:
+          type: string
+          format: uuid
+        to:
+          type: array
+          items:
+            type: string
+            format: email
+          minItems: 1
+        cc:
+          type: array
+          items:
+            type: string
+            format: email
+        subject:
+          type: string
+          maxLength: 998
+        body:
+          type: string
+          description: Email body (plain text or HTML)
+        body_type:
+          type: string
+          enum: [text, html]
+          default: text
+        reply_to_message_id:
+          type: string
+          description: Gmail message ID if this is a reply
+
+    LinkedInPostRequest:
+      type: object
+      required: [approval_id, content]
+      properties:
+        approval_id:
+          type: string
+          format: uuid
+        content:
+          type: string
+          minLength: 1
+          maxLength: 3000
+          description: Post text content
+        visibility:
+          type: string
+          enum: [PUBLIC, CONNECTIONS]
+          default: PUBLIC
+
+    WhatsAppReplyRequest:
+      type: object
+      required: [approval_id, chat_id, message]
+      properties:
+        approval_id:
+          type: string
+          format: uuid
+        chat_id:
+          type: string
+          description: WhatsApp chat identifier
+        message:
+          type: string
+          maxLength: 4096
+        reply_to_message_id:
+          type: string
+          description: Optional message ID to reply to
+
+    ActionResult:
+      type: object
+      required: [action_id, status, action_type, executed_at]
+      properties:
+        action_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [success, failed, pending]
+        action_type:
+          type: string
+          enum: [email_send, linkedin_post, whatsapp_reply]
+        approval_id:
+          type: string
+          format: uuid
+        executed_at:
+          type: string
+          format: date-time
+        result:
+          type: object
+          description: Action-specific result data
+          properties:
+            external_id:
+              type: string
+              description: ID from external service (Gmail message ID, LinkedIn post URN)
+            message:
+              type: string
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            retryable:
+              type: boolean
+
+    Error:
+      type: object
+      required: [error, message]
+      properties:
+        error:
+          type: string
+          description: Error code
+        message:
+          type: string
+          description: Human-readable error message
+        details:
+          type: object
+          additionalProperties: true
+
+  responses:
+    BadRequest:
+      description: Invalid request parameters
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: bad_request
+            message: Missing required field 'approval_id'
+
+    ApprovalRequired:
+      description: Action requires valid approval
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: approval_required
+            message: Action requires valid approval token
+
+    RateLimited:
+      description: External API rate limit exceeded
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: rate_limited
+            message: LinkedIn API rate limit exceeded. Retry after 3600 seconds.
+            details:
+              retry_after: 3600
+
+    ExecutionFailed:
+      description: Action execution failed
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: execution_failed
+            message: Failed to send email via Gmail API
+            details:
+              external_error: invalid_grant
+
+    SessionUnavailable:
+      description: Required session not available
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: session_unavailable
+            message: WhatsApp Web session not active. Re-authentication required.

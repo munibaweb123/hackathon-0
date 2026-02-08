@@ -1,0 +1,218 @@
+openapi: 3.0.3
+info:
+  title: Gold Tier Coordinator MCP Server API
+  version: 1.0.0
+  description: |
+    Coordinator server that routes actions to domain-specific MCP servers.
+    Provides health aggregation and unified action interface.
+
+servers:
+  - url: http://localhost:8000
+    description: Local coordinator server
+
+paths:
+  /health:
+    get:
+      summary: Aggregated health status of all MCP servers
+      operationId: getHealth
+      tags: [Health]
+      responses:
+        '200':
+          description: Health status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+
+  /metrics:
+    get:
+      summary: Prometheus-compatible metrics endpoint
+      operationId: getMetrics
+      tags: [Observability]
+      responses:
+        '200':
+          description: Metrics in Prometheus format
+          content:
+            text/plain:
+              schema:
+                type: string
+
+  /action/route:
+    post:
+      summary: Route an action to the appropriate domain server
+      operationId: routeAction
+      tags: [Actions]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ActionRequest'
+      responses:
+        '200':
+          description: Action executed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResponse'
+        '400':
+          description: Invalid action request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Approval required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Target server unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /servers:
+    get:
+      summary: List all registered MCP servers
+      operationId: listServers
+      tags: [Servers]
+      responses:
+        '200':
+          description: Server list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MCPServerInfo'
+
+  /servers/{serverId}/health:
+    get:
+      summary: Get health status of specific server
+      operationId: getServerHealth
+      tags: [Servers]
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [financial, social, communication]
+      responses:
+        '200':
+          description: Server health
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MCPServerInfo'
+        '404':
+          description: Server not found
+
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      required: [status, servers, timestamp]
+      properties:
+        status:
+          type: string
+          enum: [healthy, degraded, unhealthy]
+        servers:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/ServerHealth'
+        timestamp:
+          type: string
+          format: date-time
+
+    ServerHealth:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [healthy, unhealthy, starting, stopped]
+        lastCheck:
+          type: string
+          format: date-time
+        errorCount:
+          type: integer
+
+    ActionRequest:
+      type: object
+      required: [actionType, approvalRef]
+      properties:
+        actionType:
+          type: string
+          description: Action identifier (e.g., xero.invoice.create, twitter.tweet.post)
+        approvalRef:
+          type: string
+          description: Reference to approval file in vault
+        payload:
+          type: object
+          description: Action-specific parameters
+        priority:
+          type: string
+          enum: [normal, high]
+          default: normal
+
+    ActionResponse:
+      type: object
+      required: [success, actionId, timestamp]
+      properties:
+        success:
+          type: boolean
+        actionId:
+          type: string
+          format: uuid
+        serverId:
+          type: string
+          description: Server that processed the action
+        result:
+          type: object
+        timestamp:
+          type: string
+          format: date-time
+        auditRef:
+          type: string
+          description: Reference to audit log entry
+
+    MCPServerInfo:
+      type: object
+      required: [id, domain, endpoint, status]
+      properties:
+        id:
+          type: string
+        domain:
+          type: string
+          enum: [financial, social, communication]
+        endpoint:
+          type: string
+          format: uri
+        status:
+          type: string
+          enum: [healthy, unhealthy, starting, stopped]
+        lastHealthAt:
+          type: string
+          format: date-time
+        version:
+          type: string
+
+    ErrorResponse:
+      type: object
+      required: [error, message]
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+        timestamp:
+          type: string
+          format: date-time
+        requestId:
+          type: string

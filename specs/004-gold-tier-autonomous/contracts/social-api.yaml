@@ -1,0 +1,659 @@
+openapi: 3.0.3
+info:
+  title: Gold Tier Social MCP Server API
+  version: 1.0.0
+  description: |
+    Social media domain MCP server handling Facebook, Instagram, and Twitter.
+    All post/message operations require valid approval tokens.
+
+servers:
+  - url: http://localhost:8002
+    description: Local social MCP server
+
+paths:
+  /health:
+    get:
+      summary: Server health check
+      operationId: getHealth
+      tags: [Health]
+      responses:
+        '200':
+          description: Server healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SocialHealthResponse'
+
+  # Facebook/Instagram (Meta) endpoints
+  /meta/connect:
+    post:
+      summary: Initiate Meta OAuth connection
+      operationId: connectMeta
+      tags: [Meta]
+      responses:
+        '200':
+          description: OAuth URL for user authorization
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  authUrl:
+                    type: string
+                    format: uri
+                  state:
+                    type: string
+
+  /meta/callback:
+    get:
+      summary: Meta OAuth callback handler
+      operationId: metaCallback
+      tags: [Meta]
+      parameters:
+        - name: code
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: state
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Connection successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MetaConnectionStatus'
+
+  /meta/status:
+    get:
+      summary: Get Meta connection status (FB + IG)
+      operationId: getMetaStatus
+      tags: [Meta]
+      responses:
+        '200':
+          description: Connection status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MetaConnectionStatus'
+
+  /meta/messages:
+    get:
+      summary: Get recent messages from Facebook and Instagram
+      operationId: getMetaMessages
+      tags: [Meta]
+      parameters:
+        - name: platform
+          in: query
+          schema:
+            type: string
+            enum: [facebook, instagram, all]
+            default: all
+        - name: since
+          in: query
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: Message list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SocialMessage'
+
+  /meta/posts:
+    get:
+      summary: Get recent posts from Facebook and Instagram
+      operationId: getMetaPosts
+      tags: [Meta]
+      parameters:
+        - name: platform
+          in: query
+          schema:
+            type: string
+            enum: [facebook, instagram, all]
+            default: all
+        - name: since
+          in: query
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: Post list with engagement metrics
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SocialPost'
+
+  /meta/posts/create:
+    post:
+      summary: Create and publish a post (requires approval)
+      operationId: createMetaPost
+      tags: [Meta]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePostRequest'
+      responses:
+        '200':
+          description: Post published
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SocialPost'
+        '403':
+          description: Approval required
+        '429':
+          description: Rate limit exceeded
+
+  /meta/messages/reply:
+    post:
+      summary: Reply to a message (requires approval)
+      operationId: replyMetaMessage
+      tags: [Meta]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MessageReplyRequest'
+      responses:
+        '200':
+          description: Reply sent
+        '403':
+          description: Approval required
+
+  /meta/insights:
+    get:
+      summary: Get engagement insights for CEO briefing
+      operationId: getMetaInsights
+      tags: [Meta]
+      parameters:
+        - name: periodStart
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: periodEnd
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Platform insights
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MetaInsights'
+
+  # Twitter endpoints
+  /twitter/connect:
+    post:
+      summary: Initiate Twitter OAuth connection
+      operationId: connectTwitter
+      tags: [Twitter]
+      responses:
+        '200':
+          description: OAuth URL for user authorization
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  authUrl:
+                    type: string
+                    format: uri
+                  state:
+                    type: string
+
+  /twitter/callback:
+    get:
+      summary: Twitter OAuth callback handler
+      operationId: twitterCallback
+      tags: [Twitter]
+      parameters:
+        - name: code
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: state
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Connection successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TwitterConnectionStatus'
+
+  /twitter/status:
+    get:
+      summary: Get Twitter connection status
+      operationId: getTwitterStatus
+      tags: [Twitter]
+      responses:
+        '200':
+          description: Connection status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TwitterConnectionStatus'
+
+  /twitter/mentions:
+    get:
+      summary: Get recent mentions
+      operationId: getTwitterMentions
+      tags: [Twitter]
+      parameters:
+        - name: since
+          in: query
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: Mention list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Tweet'
+
+  /twitter/dms:
+    get:
+      summary: Get direct messages
+      operationId: getTwitterDMs
+      tags: [Twitter]
+      parameters:
+        - name: since
+          in: query
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: DM list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DirectMessage'
+
+  /twitter/tweets:
+    get:
+      summary: Get own tweets with engagement
+      operationId: getTwitterTweets
+      tags: [Twitter]
+      parameters:
+        - name: since
+          in: query
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: Tweet list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Tweet'
+
+  /twitter/tweets/create:
+    post:
+      summary: Create and publish a tweet (requires approval)
+      operationId: createTweet
+      tags: [Twitter]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTweetRequest'
+      responses:
+        '200':
+          description: Tweet published
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tweet'
+        '403':
+          description: Approval required
+        '429':
+          description: Rate limit exceeded
+
+  /twitter/dms/reply:
+    post:
+      summary: Reply to a DM (requires approval)
+      operationId: replyTwitterDM
+      tags: [Twitter]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DMReplyRequest'
+      responses:
+        '200':
+          description: Reply sent
+        '403':
+          description: Approval required
+
+  /twitter/insights:
+    get:
+      summary: Get Twitter insights for CEO briefing
+      operationId: getTwitterInsights
+      tags: [Twitter]
+      parameters:
+        - name: periodStart
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: periodEnd
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Twitter insights
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TwitterInsights'
+
+components:
+  schemas:
+    SocialHealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy, degraded, unhealthy]
+        platforms:
+          type: object
+          properties:
+            facebook:
+              $ref: '#/components/schemas/PlatformHealth'
+            instagram:
+              $ref: '#/components/schemas/PlatformHealth'
+            twitter:
+              $ref: '#/components/schemas/PlatformHealth'
+
+    PlatformHealth:
+      type: object
+      properties:
+        connected:
+          type: boolean
+        status:
+          type: string
+          enum: [active, expired, rate_limited, error]
+        lastSync:
+          type: string
+          format: date-time
+
+    MetaConnectionStatus:
+      type: object
+      properties:
+        facebookConnected:
+          type: boolean
+        facebookPageId:
+          type: string
+        facebookPageName:
+          type: string
+        instagramConnected:
+          type: boolean
+        instagramAccountId:
+          type: string
+        instagramUsername:
+          type: string
+        tokenExpiry:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [active, expired, auth_required, error]
+
+    TwitterConnectionStatus:
+      type: object
+      properties:
+        connected:
+          type: boolean
+        username:
+          type: string
+        userId:
+          type: string
+        followerCount:
+          type: integer
+        tokenExpiry:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [active, expired, auth_required, rate_limited, error]
+
+    SocialMessage:
+      type: object
+      properties:
+        id:
+          type: string
+        platform:
+          type: string
+          enum: [facebook, instagram]
+        senderId:
+          type: string
+        senderName:
+          type: string
+        content:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        read:
+          type: boolean
+
+    SocialPost:
+      type: object
+      properties:
+        id:
+          type: string
+        platform:
+          type: string
+          enum: [facebook, instagram]
+        content:
+          type: string
+        mediaUrl:
+          type: string
+        publishedAt:
+          type: string
+          format: date-time
+        engagement:
+          $ref: '#/components/schemas/PostEngagement'
+
+    PostEngagement:
+      type: object
+      properties:
+        likes:
+          type: integer
+        comments:
+          type: integer
+        shares:
+          type: integer
+        reach:
+          type: integer
+
+    CreatePostRequest:
+      type: object
+      required: [approvalRef, content, platforms]
+      properties:
+        approvalRef:
+          type: string
+        content:
+          type: string
+          maxLength: 2200
+        mediaUrl:
+          type: string
+          format: uri
+        platforms:
+          type: array
+          items:
+            type: string
+            enum: [facebook, instagram]
+        scheduledFor:
+          type: string
+          format: date-time
+
+    MessageReplyRequest:
+      type: object
+      required: [approvalRef, messageId, content]
+      properties:
+        approvalRef:
+          type: string
+        messageId:
+          type: string
+        content:
+          type: string
+
+    MetaInsights:
+      type: object
+      properties:
+        facebook:
+          type: object
+          properties:
+            postsCount:
+              type: integer
+            totalReach:
+              type: integer
+            engagementRate:
+              type: number
+            topPost:
+              $ref: '#/components/schemas/SocialPost'
+        instagram:
+          type: object
+          properties:
+            postsCount:
+              type: integer
+            totalReach:
+              type: integer
+            engagementRate:
+              type: number
+            topPost:
+              $ref: '#/components/schemas/SocialPost'
+
+    Tweet:
+      type: object
+      properties:
+        id:
+          type: string
+        text:
+          type: string
+        authorId:
+          type: string
+        authorUsername:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        engagement:
+          $ref: '#/components/schemas/TweetEngagement'
+        isMention:
+          type: boolean
+        isReply:
+          type: boolean
+
+    TweetEngagement:
+      type: object
+      properties:
+        likes:
+          type: integer
+        retweets:
+          type: integer
+        replies:
+          type: integer
+        impressions:
+          type: integer
+        quoteCount:
+          type: integer
+
+    DirectMessage:
+      type: object
+      properties:
+        id:
+          type: string
+        senderId:
+          type: string
+        senderUsername:
+          type: string
+        text:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    CreateTweetRequest:
+      type: object
+      required: [approvalRef, text]
+      properties:
+        approvalRef:
+          type: string
+        text:
+          type: string
+          maxLength: 280
+        replyToId:
+          type: string
+        mediaIds:
+          type: array
+          items:
+            type: string
+
+    DMReplyRequest:
+      type: object
+      required: [approvalRef, conversationId, text]
+      properties:
+        approvalRef:
+          type: string
+        conversationId:
+          type: string
+        text:
+          type: string
+
+    TwitterInsights:
+      type: object
+      properties:
+        tweetsCount:
+          type: integer
+        totalImpressions:
+          type: integer
+        engagementRate:
+          type: number
+        followerDelta:
+          type: integer
+        topTweet:
+          $ref: '#/components/schemas/Tweet'
+        mentionsCount:
+          type: integer

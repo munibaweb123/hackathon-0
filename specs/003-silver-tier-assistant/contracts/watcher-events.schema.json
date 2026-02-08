@@ -1,0 +1,352 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hackathon0.local/schemas/watcher-events.json",
+  "title": "Watcher Event Schema",
+  "description": "JSON Schema for structured event files created by Silver Tier watchers",
+
+  "definitions": {
+    "EventMetadata": {
+      "type": "object",
+      "required": ["id", "source_type", "event_type", "timestamp", "detected_at", "priority", "processing_status"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Unique event identifier"
+        },
+        "source_type": {
+          "type": "string",
+          "enum": ["gmail", "linkedin", "whatsapp"],
+          "description": "Platform that generated the event"
+        },
+        "source_id": {
+          "type": "string",
+          "description": "External platform's ID for this item"
+        },
+        "event_type": {
+          "type": "string",
+          "enum": [
+            "email_received",
+            "linkedin_notification",
+            "linkedin_message",
+            "linkedin_connection_request",
+            "whatsapp_message"
+          ],
+          "description": "Specific type of event"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the event occurred on the external platform"
+        },
+        "detected_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the watcher detected the event"
+        },
+        "priority": {
+          "type": "string",
+          "enum": ["low", "medium", "high", "urgent"],
+          "description": "Computed priority based on content analysis"
+        },
+        "processing_status": {
+          "type": "string",
+          "enum": ["new", "processing", "plan_generated", "archived"],
+          "description": "Current processing state"
+        },
+        "plan_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "ID of generated plan (if processing_status is plan_generated)"
+        }
+      }
+    },
+
+    "Sender": {
+      "type": "object",
+      "required": ["name", "identifier"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Display name of the sender"
+        },
+        "identifier": {
+          "type": "string",
+          "description": "Email address, LinkedIn ID, or phone number"
+        },
+        "profile_url": {
+          "type": "string",
+          "format": "uri",
+          "description": "URL to sender's profile (if available)"
+        }
+      }
+    },
+
+    "NormalizedContent": {
+      "type": "object",
+      "required": ["summary", "body"],
+      "properties": {
+        "summary": {
+          "type": "string",
+          "maxLength": 200,
+          "description": "One-line summary of the content"
+        },
+        "subject": {
+          "type": "string",
+          "description": "Email subject or message preview title"
+        },
+        "body": {
+          "type": "string",
+          "description": "Full text content"
+        },
+        "attachments": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name"],
+            "properties": {
+              "name": { "type": "string" },
+              "mime_type": { "type": "string" },
+              "size_bytes": { "type": "integer" }
+            }
+          }
+        }
+      }
+    },
+
+    "EventContext": {
+      "type": "object",
+      "properties": {
+        "thread_id": {
+          "type": "string",
+          "description": "Conversation thread identifier"
+        },
+        "is_reply": {
+          "type": "boolean",
+          "description": "Whether this is a reply to a previous message"
+        },
+        "reply_to_id": {
+          "type": "string",
+          "description": "ID of message being replied to"
+        },
+        "labels": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Gmail labels or categories"
+        },
+        "urgency_indicators": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Keywords or signals suggesting urgency"
+        }
+      }
+    },
+
+    "GmailEventData": {
+      "type": "object",
+      "required": ["message_id", "thread_id", "history_id"],
+      "properties": {
+        "message_id": {
+          "type": "string",
+          "description": "Gmail message ID"
+        },
+        "thread_id": {
+          "type": "string",
+          "description": "Gmail thread ID"
+        },
+        "history_id": {
+          "type": "string",
+          "description": "Gmail history ID for incremental sync"
+        },
+        "labels": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "snippet": {
+          "type": "string",
+          "description": "Gmail's auto-generated snippet"
+        },
+        "internal_date": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+
+    "LinkedInEventData": {
+      "type": "object",
+      "required": ["notification_type"],
+      "properties": {
+        "notification_type": {
+          "type": "string",
+          "enum": ["message", "connection_request", "mention", "post_reaction", "comment"]
+        },
+        "notification_id": {
+          "type": "string"
+        },
+        "profile_urn": {
+          "type": "string",
+          "description": "LinkedIn URN of the person who triggered the notification"
+        },
+        "content_urn": {
+          "type": "string",
+          "description": "URN of the content (post, message, etc.)"
+        }
+      }
+    },
+
+    "WhatsAppEventData": {
+      "type": "object",
+      "required": ["chat_id", "message_id"],
+      "properties": {
+        "chat_id": {
+          "type": "string",
+          "description": "WhatsApp chat identifier"
+        },
+        "message_id": {
+          "type": "string",
+          "description": "WhatsApp message identifier"
+        },
+        "chat_name": {
+          "type": "string",
+          "description": "Name of the chat (contact name or group name)"
+        },
+        "is_group": {
+          "type": "boolean",
+          "description": "Whether this is a group message"
+        },
+        "phone_number": {
+          "type": "string",
+          "description": "Sender's phone number (if available)"
+        }
+      }
+    }
+  },
+
+  "type": "object",
+  "required": ["metadata", "sender", "content", "raw_data"],
+  "properties": {
+    "metadata": {
+      "$ref": "#/definitions/EventMetadata"
+    },
+    "sender": {
+      "$ref": "#/definitions/Sender"
+    },
+    "content": {
+      "$ref": "#/definitions/NormalizedContent"
+    },
+    "context": {
+      "$ref": "#/definitions/EventContext"
+    },
+    "raw_data": {
+      "type": "object",
+      "description": "Original data from the external platform",
+      "oneOf": [
+        { "$ref": "#/definitions/GmailEventData" },
+        { "$ref": "#/definitions/LinkedInEventData" },
+        { "$ref": "#/definitions/WhatsAppEventData" }
+      ]
+    }
+  },
+
+  "examples": [
+    {
+      "metadata": {
+        "id": "550e8400-e29b-41d4-a716-446655440000",
+        "source_type": "gmail",
+        "source_id": "18d5f2a3b4c5d6e7",
+        "event_type": "email_received",
+        "timestamp": "2026-02-08T10:30:00Z",
+        "detected_at": "2026-02-08T10:35:00Z",
+        "priority": "high",
+        "processing_status": "new"
+      },
+      "sender": {
+        "name": "John Customer",
+        "identifier": "john.customer@example.com"
+      },
+      "content": {
+        "summary": "Customer requesting urgent product demo",
+        "subject": "URGENT: Need product demo this week",
+        "body": "Hi,\n\nI need to see a demo of your product urgently. We have budget approval and want to make a decision by Friday.\n\nBest,\nJohn"
+      },
+      "context": {
+        "thread_id": "thread_abc123",
+        "is_reply": false,
+        "labels": ["INBOX", "IMPORTANT"],
+        "urgency_indicators": ["URGENT", "this week", "budget approval"]
+      },
+      "raw_data": {
+        "message_id": "18d5f2a3b4c5d6e7",
+        "thread_id": "thread_abc123",
+        "history_id": "12345",
+        "labels": ["INBOX", "IMPORTANT", "UNREAD"],
+        "snippet": "I need to see a demo of your product urgently...",
+        "internal_date": "2026-02-08T10:30:00Z"
+      }
+    },
+    {
+      "metadata": {
+        "id": "660e8400-e29b-41d4-a716-446655440001",
+        "source_type": "linkedin",
+        "source_id": "urn:li:activity:123456",
+        "event_type": "linkedin_connection_request",
+        "timestamp": "2026-02-08T11:00:00Z",
+        "detected_at": "2026-02-08T11:15:00Z",
+        "priority": "medium",
+        "processing_status": "new"
+      },
+      "sender": {
+        "name": "Sarah Manager",
+        "identifier": "sarah-manager-12345",
+        "profile_url": "https://www.linkedin.com/in/sarah-manager-12345"
+      },
+      "content": {
+        "summary": "Connection request from VP of Engineering at TechCorp",
+        "body": "Hi! I saw your recent post about AI automation and would love to connect. We're exploring similar solutions at TechCorp."
+      },
+      "context": {
+        "is_reply": false,
+        "urgency_indicators": []
+      },
+      "raw_data": {
+        "notification_type": "connection_request",
+        "notification_id": "notif_xyz789",
+        "profile_urn": "urn:li:person:sarah-manager-12345"
+      }
+    },
+    {
+      "metadata": {
+        "id": "770e8400-e29b-41d4-a716-446655440002",
+        "source_type": "whatsapp",
+        "source_id": "msg_wa_abc123",
+        "event_type": "whatsapp_message",
+        "timestamp": "2026-02-08T12:00:00Z",
+        "detected_at": "2026-02-08T12:00:30Z",
+        "priority": "medium",
+        "processing_status": "new"
+      },
+      "sender": {
+        "name": "Supplier Contact",
+        "identifier": "+1234567890"
+      },
+      "content": {
+        "summary": "Supplier confirming shipment details",
+        "body": "Your order #12345 has been shipped. Expected delivery: Monday. Tracking: XYZ123"
+      },
+      "context": {
+        "thread_id": "chat_supplier_001",
+        "is_reply": true,
+        "reply_to_id": "msg_wa_prev123",
+        "urgency_indicators": []
+      },
+      "raw_data": {
+        "chat_id": "chat_supplier_001",
+        "message_id": "msg_wa_abc123",
+        "chat_name": "Supplier Contact",
+        "is_group": false,
+        "phone_number": "+1234567890"
+      }
+    }
+  ]
+}

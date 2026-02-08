@@ -3,13 +3,233 @@ Task Scheduler Module
 
 This module implements scheduling for periodic watcher execution and daily reasoning runs.
 It ensures that scheduled tasks don't bypass approval requirements.
+
+Silver Tier Extensions:
+- APScheduler integration for robust scheduling
+- Cron-based scheduling support
+- Async job execution
+- Job persistence across restarts
 """
 
 import threading
 import time
+import asyncio
 from datetime import datetime, timedelta
-from typing import Callable, Optional, Dict, Any
-from core.logger import Logger
+from typing import Callable, Optional, Dict, Any, List, Union
+from pathlib import Path
+
+# Try to import APScheduler, fall back to basic implementation
+try:
+    from apscheduler.schedulers.asyncio import AsyncIOScheduler
+    from apscheduler.schedulers.background import BackgroundScheduler
+    from apscheduler.triggers.interval import IntervalTrigger
+    from apscheduler.triggers.cron import CronTrigger
+    from apscheduler.jobstores.memory import MemoryJobStore
+    APSCHEDULER_AVAILABLE = True
+except ImportError:
+    APSCHEDULER_AVAILABLE = False
+
+try:
+    from core.logger import Logger
+except ImportError:
+    Logger = None
+
+
+class APSchedulerWrapper:
+    """
+    APScheduler-based task scheduler for Silver Tier.
+    Provides robust scheduling with cron support and async execution.
+    """
+
+    def __init__(self, logger: Optional[Any] = None, use_async: bool = False):
+        """
+        Initialize the APScheduler wrapper.
+
+        Args:
+            logger: Logger instance for auditability
+            use_async: Whether to use async scheduler
+        """
+        if not APSCHEDULER_AVAILABLE:
+            raise ImportError(
+                "APScheduler is required for Silver Tier scheduling. "
+                "Install it with: pip install apscheduler"
+            )
+
+        self.logger = logger
+        self.use_async = use_async
+
+        # Configure job stores
+        jobstores = {
+            'default': MemoryJobStore()
+        }
+
+        # Create scheduler
+        if use_async:
+            self.scheduler = AsyncIOScheduler(jobstores=jobstores)
+        else:
+            self.scheduler = BackgroundScheduler(jobstores=jobstores)
+
+        self._job_callbacks: Dict[str, Callable] = {}
+
+    def add_interval_job(
+        self,
+        job_id: str,
+        func: Callable,
+        seconds: int,
+        args: Optional[List] = None,
+        kwargs: Optional[Dict] = None,
+        start_immediately: bool = True,
+    ) -> str:
+        """
+        Add an interval-based job.
+
+        Args:
+            job_id: Unique job identifier
+            func: Function to execute
+            seconds: Interval in seconds (min: 30)
+            args: Positional arguments for func
+            kwargs: Keyword arguments for func
+            start_immediately: Whether to run immediately
+
+        Returns:
+            Job ID
+        """
+        if seconds < 30:
+            seconds = 30  # Enforce minimum
+
+        trigger = IntervalTrigger(seconds=seconds)
+
+        self.scheduler.add_job(
+            func,
+            trigger,
+            id=job_id,
+            args=args or [],
+            kwargs=kwargs or {},
+            replace_existing=True,
+            next_run_time=datetime.now() if start_immediately else None,
+        )
+
+        self._job_callbacks[job_id] = func
+        self._log_event("job_added", f"Interval job '{job_id}' added ({seconds}s)")
+
+        return job_id
+
+    def add_cron_job(
+        self,
+        job_id: str,
+        func: Callable,
+        cron_expression: str,
+        args: Optional[List] = None,
+        kwargs: Optional[Dict] = None,
+    ) -> str:
+        """
+        Add a cron-based job.
+
+        Args:
+            job_id: Unique job identifier
+            func: Function to execute
+            cron_expression: Cron expression (minute hour day month weekday)
+            args: Positional arguments for func
+            kwargs: Keyword arguments for func
+
+        Returns:
+            Job ID
+        """
+        parts = cron_expression.split()
+        if len(parts) != 5:
+            raise ValueError("Cron expression must have 5 parts")
+
+        trigger = CronTrigger(
+            minute=parts[0],
+            hour=parts[1],
+            day=parts[2],
+            month=parts[3],
+            day_of_week=parts[4],
+        )
+
+        self.scheduler.add_job(
+            func,
+            trigger,
+            id=job_id,
+            args=args or [],
+            kwargs=kwargs or {},
+            replace_existing=True,
+        )
+
+        self._job_callbacks[job_id] = func
+        self._log_event("job_added", f"Cron job '{job_id}' added ({cron_expression})")
+
+        return job_id
+
+    def remove_job(self, job_id: str) -> bool:
+        """Remove a scheduled job."""
+        try:
+            self.scheduler.remove_job(job_id)
+            self._job_callbacks.pop(job_id, None)
+            self._log_event("job_removed", f"Job '{job_id}' removed")
+            return True
+        except Exception:
+            return False
+
+    def pause_job(self, job_id: str) -> bool:
+        """Pause a scheduled job."""
+        try:
+            self.scheduler.pause_job(job_id)
+            self._log_event("job_paused", f"Job '{job_id}' paused")
+            return True
+        except Exception:
+            return False
+
+    def resume_job(self, job_id: str) -> bool:
+        """Resume a paused job."""
+        try:
+            self.scheduler.resume_job(job_id)
+            self._log_event("job_resumed", f"Job '{job_id}' resumed")
+            return True
+        except Exception:
+            return False
+
+    def start(self):
+        """Start the scheduler."""
+        if not self.scheduler.running:
+            self.scheduler.start()
+            self._log_event("scheduler_started", "APScheduler started")
+
+    def stop(self, wait: bool = True):
+        """Stop the scheduler."""
+        if self.scheduler.running:
+            self.scheduler.shutdown(wait=wait)
+            self._log_event("scheduler_stopped", "APScheduler stopped")
+
+    def get_jobs(self) -> List[Dict[str, Any]]:
+        """Get all scheduled jobs."""
+        jobs = []
+        for job in self.scheduler.get_jobs():
+            jobs.append({
+                "id": job.id,
+                "name": job.name or job.id,
+                "next_run": job.next_run_time.isoformat() if job.next_run_time else None,
+                "trigger": str(job.trigger),
+            })
+        return jobs
+
+    def get_status(self) -> Dict[str, Any]:
+        """Get scheduler status."""
+        return {
+            "running": self.scheduler.running,
+            "job_count": len(self.scheduler.get_jobs()),
+            "jobs": self.get_jobs(),
+        }
+
+    def _log_event(self, event_type: str, message: str):
+        """Log a scheduler event."""
+        if self.logger:
+            self.logger.log_system_event(
+                event_type=event_type,
+                component="apscheduler",
+                message=message,
+                details={}
+            )
 
 
 class TaskScheduler:
