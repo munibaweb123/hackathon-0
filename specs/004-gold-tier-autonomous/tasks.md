@@ -232,16 +232,16 @@
 
 ### Retry Queue Integration
 
-- [ ] T070 [US6] Integrate RetryQueue with all MCP action handlers in agent-skills/mcp_server/financial.py
-- [ ] T071 [US6] Integrate RetryQueue with Social MCP action handlers in agent-skills/mcp_server/social.py
-- [ ] T072 [US6] Implement retry worker in agent-skills/scheduler/task_scheduler.py (process pending retries, exponential backoff)
-- [ ] T073 [US6] Add user notification on permanent failure in agent-skills/core/retry_queue.py (after 5 retries)
+- [x] T070 [US6] Integrate RetryQueue with all MCP action handlers in agent-skills/mcp_server/financial.py
+- [x] T071 [US6] Integrate RetryQueue with Social MCP action handlers in agent-skills/mcp_server/social.py
+- [x] T072 [US6] Implement retry worker in agent-skills/scheduler/task_scheduler.py (process pending retries, exponential backoff)
+- [x] T073 [US6] Add user notification on permanent failure in agent-skills/core/retry_queue.py (after 5 retries)
 
 ### Graceful Degradation
 
-- [ ] T074 [US6] Update CEOBriefingSkill to handle unavailable sources in agent-skills/skills/ceo_briefing_skill.py ([DATA UNAVAILABLE] markers)
-- [ ] T075 [US6] Implement OAuth token refresh monitoring in agent-skills/core/credential_manager.py (24-hour expiry warning)
-- [ ] T076 [US6] Add degraded mode status to coordinator health in agent-skills/mcp_server/coordinator.py
+- [x] T074 [US6] Update CEOBriefingSkill to handle unavailable sources in agent-skills/skills/ceo_briefing_skill.py ([DATA UNAVAILABLE] markers)
+- [x] T075 [US6] Implement OAuth token refresh monitoring in agent-skills/core/credential_manager.py (24-hour expiry warning)
+- [x] T076 [US6] Add degraded mode status to coordinator health in agent-skills/mcp_server/coordinator.py
 
 **Checkpoint**: Error recovery complete - actions retry, system degrades gracefully
 
@@ -255,19 +255,19 @@
 
 ### Contact Models
 
-- [ ] T077 [P] [US7] Create UnifiedContact model in agent-skills/models/unified_contact.py (id, primary_email, display_name, company, notes)
-- [ ] T078 [P] [US7] Create PlatformIdentity model in agent-skills/models/unified_contact.py (id, contact_id, platform, platform_id, linked_by, confidence)
+- [x] T077 [P] [US7] Create UnifiedContact model in agent-skills/models/unified_contact.py (id, primary_email, display_name, company, notes)
+- [x] T078 [P] [US7] Create PlatformIdentity model in agent-skills/models/unified_contact.py (id, contact_id, platform, platform_id, linked_by, confidence)
 
 ### Contact Matcher
 
-- [ ] T079 [US7] Implement ContactMatcher in agent-skills/core/contact_matcher.py (email-based matching, manual linking API)
-- [ ] T080 [US7] Integrate contact matching with XeroSkill in agent-skills/skills/xero_skill.py (link Xero contacts)
-- [ ] T081 [US7] Integrate contact matching with social skills in agent-skills/skills/facebook_skill.py, twitter_skill.py
-- [ ] T082 [US7] Add cross-domain context to reasoning loop in agent-skills/core/reasoning_loop.py
+- [x] T079 [US7] Implement ContactMatcher in agent-skills/core/contact_matcher.py (email-based matching, manual linking API)
+- [x] T080 [US7] Integrate contact matching with XeroSkill in agent-skills/skills/xero_skill.py (link Xero contacts)
+- [x] T081 [US7] Integrate contact matching with social skills in agent-skills/skills/facebook_skill.py, twitter_skill.py
+- [x] T082 [US7] Add cross-domain context to reasoning loop in agent-skills/core/reasoning_loop.py
 
 ### Dashboard Integration for US7
 
-- [ ] T083 [US7] Create contacts page in dashboard/src/app/contacts/page.tsx (unified view, manual linking)
+- [x] T083 [US7] Create contacts page in dashboard/src/app/contacts/page.tsx (unified view, manual linking)
 
 **Checkpoint**: Cross-domain context complete - contacts linked, context appears in AI reasoning
 
@@ -281,20 +281,20 @@
 
 ### AuditSkill Implementation
 
-- [ ] T084 [US8] Create AuditSkill in agent-skills/skills/audit_skill.py (extends BaseSkill, export, verify chain)
-- [ ] T085 [US8] Implement audit log export in agent-skills/skills/audit_skill.py (date range filter, JSONL format)
-- [ ] T086 [US8] Implement 90-day archive rotation in agent-skills/core/audit_logger.py (move to archive/, gzip)
-- [ ] T087 [US8] Register AuditSkill in agent-skills/core/skill_registry.py
+- [x] T084 [US8] Create AuditSkill in agent-skills/skills/audit_skill.py (extends BaseSkill, export, verify chain)
+- [x] T085 [US8] Implement audit log export in agent-skills/skills/audit_skill.py (date range filter, JSONL format)
+- [x] T086 [US8] Implement 90-day archive rotation in agent-skills/core/audit_logger.py (move to archive/, gzip)
+- [x] T087 [US8] Register AuditSkill in agent-skills/core/skill_registry.py
 
 ### Dashboard Integration for US8
 
-- [ ] T088 [P] [US8] Create audit log viewer component in dashboard/src/components/audit-log-viewer.tsx (filter, search, export)
-- [ ] T089 [US8] Create audit page in dashboard/src/app/audit/page.tsx (log viewer, chain status)
+- [x] T088 [P] [US8] Create audit log viewer component in dashboard/src/components/audit-log-viewer.tsx (filter, search, export)
+- [x] T089 [US8] Create audit page in dashboard/src/app/audit/page.tsx (log viewer, chain status)
 
 ### Audit Integration
 
-- [ ] T090 [US8] Ensure all MCP actions call AuditLogger in agent-skills/mcp_server/coordinator.py (via middleware)
-- [ ] T091 [US8] Add audit verification to verify-gold CLI command in agent-skills/cli/main.py
+- [x] T090 [US8] Ensure all MCP actions call AuditLogger in agent-skills/mcp_server/coordinator.py (via middleware)
+- [x] T091 [US8] Add audit verification to verify-gold CLI command in agent-skills/cli/main.py
 
 **Checkpoint**: Audit logging complete - all actions logged, chain verifiable, export works
 
@@ -306,19 +306,19 @@
 
 ### Integration
 
-- [ ] T092 Update dashboard navigation in dashboard/src/app/layout.tsx to include all Gold Tier pages
-- [ ] T093 Add Gold Tier watcher status to watcher-status-grid in dashboard/src/components/watcher-status-grid.tsx
-- [ ] T094 Update orchestrator to coordinate all Gold Tier skills in agent-skills/orchestrator.py
+- [x] T092 Update dashboard navigation in dashboard/src/app/layout.tsx to include all Gold Tier pages
+- [x] T093 Add Gold Tier watcher status to watcher-status-grid in dashboard/src/components/watcher-status-grid.tsx
+- [x] T094 Update orchestrator to coordinate all Gold Tier skills in agent-skills/orchestrator.py
 
 ### Configuration
 
-- [ ] T095 Create .env.example with all Gold Tier variables documented
-- [ ] T096 Update obsidian-vault/config/schedules.yaml with all Gold Tier schedules
+- [x] T095 Create .env.example with all Gold Tier variables documented
+- [x] T096 Update obsidian-vault/config/schedules.yaml with all Gold Tier schedules
 
 ### Final Verification
 
-- [ ] T097 Run verify-gold CLI command and fix any issues
-- [ ] T098 Manual end-to-end test: OAuth all platforms, generate CEO briefing, verify audit chain
+- [x] T097 Run verify-gold CLI command and fix any issues
+- [x] T098 Manual end-to-end test: OAuth all platforms, generate CEO briefing, verify audit chain
 
 ---
 

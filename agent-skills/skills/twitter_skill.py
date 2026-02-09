@@ -85,6 +85,27 @@ class TwitterSkill(BaseSkill):
         except Exception as e:
             return SkillResult(success=False, error=str(e))
 
+    def _sync_contacts(self, items: list) -> None:
+        """T081: Sync Twitter users to unified contact registry."""
+        try:
+            from core.contact_matcher import ContactMatcher
+            matcher = ContactMatcher()
+            for item in items:
+                user = item.get("user", item.get("author", {}))
+                if isinstance(user, dict):
+                    name = user.get("name", user.get("screen_name", ""))
+                    tw_id = user.get("id", user.get("id_str", ""))
+                    email = user.get("email", "")
+                    if tw_id and name:
+                        matcher.create_or_update(
+                            email=email or f"{tw_id}@twitter.placeholder",
+                            display_name=name,
+                            platform="twitter",
+                            platform_id=str(tw_id),
+                        )
+        except (ImportError, Exception):
+            pass
+
     async def _get_mentions(self, input_data: Dict[str, Any]) -> SkillResult:
         if not httpx:
             return self._mock_mentions()
@@ -95,7 +116,9 @@ class TwitterSkill(BaseSkill):
                     params["since"] = input_data["since"]
                 resp = await client.get(f"{self._social_mcp_url}/twitter/mentions", params=params)
                 if resp.status_code == 200:
-                    return SkillResult(success=True, data={"mentions": resp.json()})
+                    data = resp.json()
+                    self._sync_contacts(data if isinstance(data, list) else data.get("mentions", []))
+                    return SkillResult(success=True, data={"mentions": data})
                 return SkillResult(success=False, error=f"API error: {resp.status_code}")
         except Exception:
             return self._mock_mentions()

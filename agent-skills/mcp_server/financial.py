@@ -551,38 +551,52 @@ async def get_financial_summary(
 async def action_execute(request: dict):
     """
     Execute an action routed from the coordinator.
-
-    Gold Tier: This endpoint is called by the coordinator for
-    actions in the financial domain.
+    Integrates with RetryQueue for failed actions (T070).
     """
     action_type = request.get("actionType", "")
     approval_ref = request.get("approvalRef", "")
     payload = request.get("payload", {})
 
-    # Route to appropriate handler
-    if action_type == "xero.invoice.create":
-        line_items = [LineItem(**item) for item in payload.get("lineItems", [])]
-        req = CreateInvoiceRequest(
-            approvalRef=approval_ref,
-            contactId=payload.get("contactId", ""),
-            dueDate=payload.get("dueDate"),
-            lineItems=line_items,
-            reference=payload.get("reference"),
-        )
-        result = await create_invoice(req)
-        return {"success": True, "result": result.dict()}
+    try:
+        # Route to appropriate handler
+        if action_type == "xero.invoice.create":
+            line_items = [LineItem(**item) for item in payload.get("lineItems", [])]
+            req = CreateInvoiceRequest(
+                approvalRef=approval_ref,
+                contactId=payload.get("contactId", ""),
+                dueDate=payload.get("dueDate"),
+                lineItems=line_items,
+                reference=payload.get("reference"),
+            )
+            result = await create_invoice(req)
+            return {"success": True, "result": result.dict()}
 
-    elif action_type == "xero.transaction.categorize":
-        req = CategorizeRequest(
-            approvalRef=approval_ref,
-            accountCode=payload.get("accountCode", ""),
-            description=payload.get("description"),
-        )
-        result = await categorize_transaction(payload.get("transactionId", ""), req)
-        return {"success": True, "result": result}
+        elif action_type == "xero.transaction.categorize":
+            req = CategorizeRequest(
+                approvalRef=approval_ref,
+                accountCode=payload.get("accountCode", ""),
+                description=payload.get("description"),
+            )
+            result = await categorize_transaction(payload.get("transactionId", ""), req)
+            return {"success": True, "result": result}
 
-    else:
-        return {"success": False, "error": f"Unknown action type: {action_type}"}
+        else:
+            return {"success": False, "error": f"Unknown action type: {action_type}"}
+
+    except Exception as e:
+        # Queue for retry on failure (FR-020)
+        try:
+            from core.retry_queue import RetryQueue
+            retry_queue = RetryQueue()
+            retry_queue.add(
+                action_type=action_type,
+                action_payload=payload,
+                failure_reason=str(e),
+                approval_ref=approval_ref,
+            )
+        except ImportError:
+            pass
+        return {"success": False, "error": str(e), "queued_for_retry": True}
 
 
 def run_financial_server(host: str = "0.0.0.0", port: int = 8001):

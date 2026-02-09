@@ -11,6 +11,7 @@ Silver Tier Extensions:
 - Job persistence across restarts
 """
 
+import os
 import threading
 import time
 import asyncio
@@ -474,6 +475,80 @@ class TaskScheduler:
             }
 
         return status
+
+
+# Gold Tier: Retry worker (T072)
+def process_retry_queue():
+    """
+    Process pending retry items with exponential backoff.
+    Called periodically by the scheduler (every 60 seconds).
+    """
+    try:
+        from core.retry_queue import RetryQueue
+        import httpx
+
+        retry_queue = RetryQueue()
+        pending = retry_queue.get_pending()
+
+        if not pending:
+            return
+
+        coordinator_url = os.environ.get("COORDINATOR_URL", "http://localhost:8000")
+
+        for item in pending:
+            retry_queue.mark_retrying(item.id)
+
+            try:
+                with httpx.Client(timeout=30.0) as client:
+                    response = client.post(
+                        f"{coordinator_url}/action/route",
+                        json={
+                            "actionType": item.action_type,
+                            "approvalRef": item.approval_ref or "retry",
+                            "payload": item.action_payload,
+                        },
+                    )
+                    if response.status_code == 200:
+                        retry_queue.mark_succeeded(item.id)
+                    else:
+                        retry_queue.mark_failed(
+                            item.id,
+                            f"HTTP {response.status_code}",
+                        )
+            except Exception as e:
+                retry_queue.mark_failed(item.id, str(e))
+
+    except ImportError:
+        pass
+
+
+# Gold Tier: Token refresh monitoring (T075)
+def check_token_expiry():
+    """
+    Monitor OAuth token expiry and warn 24 hours before expiration.
+    Creates notification files in vault when tokens are expiring.
+    """
+    try:
+        from core.credential_manager import CredentialManager
+
+        cm = CredentialManager()
+        services = ["xero", "meta", "twitter"]
+
+        for service in services:
+            if cm.has_credentials(service) and cm.is_token_expired(service, buffer_hours=24):
+                # Create a warning notification in vault
+                vault_path = os.environ.get("VAULT_PATH", "./obsidian-vault")
+                notification_path = Path(vault_path) / "inbox" / f"TOKEN_EXPIRY_{service.upper()}_{datetime.now().strftime('%Y%m%d')}.md"
+
+                if not notification_path.exists():
+                    notification_path.parent.mkdir(parents=True, exist_ok=True)
+                    with open(notification_path, "w") as f:
+                        f.write(f"---\ntype: token_expiry_warning\nservice: {service}\ntimestamp: {datetime.now().isoformat()}\npriority: high\n---\n\n")
+                        f.write(f"# Token Expiry Warning: {service.title()}\n\n")
+                        f.write(f"The OAuth token for **{service.title()}** is expiring within 24 hours.\n")
+                        f.write(f"Please re-authenticate at the dashboard to maintain connectivity.\n")
+    except ImportError:
+        pass
 
 
 # Example usage

@@ -138,6 +138,12 @@ class ReasoningLoop:
                 f"- [{source.upper()}] (Priority: {priority}) {summary}"
             )
 
+        # Add cross-domain contact context (T082)
+        for event in event_group:
+            contact_ctx = self._get_contact_context(event)
+            if contact_ctx:
+                event_summaries.append(contact_ctx)
+
         events_context = "\n".join(event_summaries)
 
         prompt = f"""You are an AI Employee assistant analyzing incoming events.
@@ -293,6 +299,45 @@ Respond with JSON in this format:
                     proposed_content=action.get("proposed_content", ""),
                     risk_level=action.get("risk_level", "medium"),
                 )
+
+    def _get_contact_context(self, event: Dict) -> str:
+        """
+        Fetch cross-domain context for an event's sender.
+
+        Per T082: Looks up the sender across all platforms via ContactMatcher.
+        """
+        try:
+            from core.contact_matcher import ContactMatcher
+            matcher = ContactMatcher()
+
+            metadata = event.get("metadata", {})
+            raw_data = metadata.get("raw_data", {})
+            normalized = metadata.get("normalized_data", {})
+
+            sender_email = (
+                raw_data.get("sender_email")
+                or normalized.get("sender", {}).get("email")
+            )
+            if sender_email:
+                context = matcher.get_contact_context(sender_email)
+                if context:
+                    return f"\n[CROSS-DOMAIN CONTEXT] {context}"
+
+            sender_name = (
+                raw_data.get("sender")
+                or normalized.get("sender", {}).get("name")
+            )
+            if sender_name:
+                contact = matcher.find_by_name(sender_name)
+                if contact:
+                    return (
+                        f"\n[CROSS-DOMAIN CONTEXT] Contact: {contact.get('display_name', sender_name)}, "
+                        f"Company: {contact.get('company', 'N/A')}"
+                    )
+        except (ImportError, Exception):
+            pass
+
+        return ""
 
     def process_inbox(self) -> Dict[str, Any]:
         """

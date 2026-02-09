@@ -268,3 +268,62 @@ class RetryQueue:
                 item for item in self._queue.values()
                 if item.action_type == action_type
             ]
+
+
+def notify_permanent_failure(item: "RetryItem") -> None:
+    """
+    Default notification handler for permanent failures.
+
+    Creates a notification file in the vault inbox so the user
+    is alerted about actions that could not be completed after
+    max retries.
+
+    Per FR-020b: Notify user after 5 unsuccessful retry attempts.
+    Per FR-021: Notify users of integration failures within 5 minutes.
+    """
+    vault_path = os.environ.get("VAULT_PATH", "./obsidian-vault")
+    inbox_dir = Path(vault_path) / "inbox"
+    inbox_dir.mkdir(parents=True, exist_ok=True)
+
+    now = datetime.utcnow()
+    filename = f"FAILURE_{now.strftime('%Y-%m-%d_%H%M%S')}_{item.id[:8]}.md"
+
+    content = f"""---
+id: {item.id}
+type: permanent_failure
+action_type: {item.action_type}
+retry_count: {item.retry_count}
+created_at: {now.isoformat()}Z
+priority: high
+processing_status: new
+source_type: system
+---
+
+# Action Permanently Failed
+
+**Action**: {item.action_type}
+**Failure Reason**: {item.failure_reason}
+**Retries Attempted**: {item.retry_count}
+
+## Recommended Actions
+
+- Review the failure reason above
+- Check the relevant service status
+- Retry manually if the issue has been resolved
+"""
+
+    filepath = inbox_dir / filename
+    filepath.write_text(content)
+
+
+def create_retry_queue_with_notifications(vault_path: str = None) -> RetryQueue:
+    """
+    Factory function to create a RetryQueue with default notification handler.
+
+    Returns:
+        RetryQueue configured with permanent failure notifications
+    """
+    return RetryQueue(
+        vault_path=vault_path,
+        on_permanent_failure=notify_permanent_failure,
+    )

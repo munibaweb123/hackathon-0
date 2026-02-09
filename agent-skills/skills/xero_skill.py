@@ -238,12 +238,33 @@ class XeroSkill(BaseSkill):
         return await self._make_request("POST", "/xero/invoices/create", request_data)
 
     async def _list_contacts(self, params: dict) -> dict:
-        """List contacts from Xero."""
+        """List contacts from Xero and sync to unified contacts."""
         query_params = {}
         if "search" in params:
             query_params["search"] = params["search"]
 
-        return await self._make_request("GET", "/xero/contacts", query_params)
+        result = await self._make_request("GET", "/xero/contacts", query_params)
+
+        # T080: Sync Xero contacts to unified contact registry
+        try:
+            from core.contact_matcher import ContactMatcher
+            matcher = ContactMatcher()
+            for contact in result.get("contacts", []):
+                email = contact.get("email") or contact.get("emailAddress")
+                name = contact.get("name") or contact.get("contactName", "")
+                xero_id = contact.get("contactID", "")
+                if email and xero_id:
+                    matcher.create_or_update(
+                        email=email,
+                        display_name=name,
+                        platform="xero",
+                        platform_id=xero_id,
+                        company=contact.get("companyNumber", ""),
+                    )
+        except (ImportError, Exception):
+            pass
+
+        return result
 
     async def _list_transactions(self, params: dict) -> dict:
         """List bank transactions."""

@@ -92,6 +92,64 @@ schedules:
       archive_after_days: 30
       delete_after_days: 90
 
+  # Gold Tier: Retry queue processing
+  retry_queue_worker:
+    id: retry_queue_worker
+    task_type: retry_processing
+    target_id: retry_queue
+    schedule_type: interval
+    interval_seconds: 120  # Every 2 minutes
+    enabled: true
+    description: Process pending retry queue items with exponential backoff
+
+  # Gold Tier: OAuth token expiry monitoring
+  token_expiry_check:
+    id: token_expiry_check
+    task_type: token_monitoring
+    target_id: credential_manager
+    schedule_type: interval
+    interval_seconds: 3600  # Every hour
+    enabled: true
+    description: Check OAuth token expiry and create warnings for tokens expiring within 24 hours
+
+  # Gold Tier: Audit log archival
+  audit_archive:
+    id: audit_archive
+    task_type: audit_maintenance
+    target_id: audit_logger
+    schedule_type: cron
+    cron_expression: "0 2 * * 0"  # 2 AM on Sundays
+    enabled: true
+    description: Archive audit logs older than 90 days to cold storage (gzip)
+
+  # Gold Tier: Social media watchers
+  facebook_poll:
+    id: facebook_poll
+    task_type: watcher_poll
+    target_id: facebook_watcher
+    schedule_type: interval
+    interval_seconds: 600  # Every 10 minutes
+    enabled: true
+    description: Poll Facebook pages for new messages
+
+  instagram_poll:
+    id: instagram_poll
+    task_type: watcher_poll
+    target_id: instagram_watcher
+    schedule_type: interval
+    interval_seconds: 600  # Every 10 minutes
+    enabled: true
+    description: Poll Instagram for new messages and comments
+
+  twitter_poll:
+    id: twitter_poll
+    task_type: watcher_poll
+    target_id: twitter_watcher
+    schedule_type: interval
+    interval_seconds: 300  # Every 5 minutes
+    enabled: true
+    description: Poll Twitter for mentions and DMs
+
 # Global scheduler settings
 settings:
   # Scheduler behavior
@@ -115,6 +173,7 @@ settings:
   log_job_errors: true
 
 # Metadata
-_version: "1.0.0"
+_version: "2.0.0"
 _created: "2026-02-08"
-_feature: "003-silver-tier-assistant"
+_updated: "2026-02-09"
+_feature: "004-gold-tier-autonomous"

@@ -15,6 +15,7 @@ const navItems = [
   { href: "/xero", label: "Xero", icon: "💰" },
   { href: "/social", label: "Social Media", icon: "📱" },
   { href: "/briefings", label: "CEO Briefings", icon: "📊" },
+  { href: "/contacts", label: "Contacts", icon: "👤" },
   { href: "/audit", label: "Audit Logs", icon: "📋" },
   { href: "/settings", label: "Settings", icon: "⚙" },
 ];
@@ -27,7 +28,7 @@ export function Sidebar() {
       <div className="flex h-14 items-center border-b px-4">
         <h1 className="text-lg font-semibold">AI Employee</h1>
         <span className="ml-2 rounded bg-primary/10 px-2 py-0.5 text-xs text-primary">
-          Bronze+Silver
+          Gold Tier
         </span>
       </div>
       <nav className="flex-1 space-y-1 p-2">

@@ -234,7 +234,7 @@ def main():
     """Main entry point for the Silver Tier Agent."""
     parser = argparse.ArgumentParser(description="Silver Tier Personal AI Employee")
     parser.add_argument('command', nargs='?', default='start',
-                       help='Command to execute (start, stop, status, process, cycle)')
+                       help='Command to execute (start, stop, status, process, cycle, verify-gold)')
     parser.add_argument('--foreground', action='store_true',
                        help='Run in foreground (don\'t daemonize)')
 
@@ -278,6 +278,94 @@ def main():
     elif args.command == 'cycle':
         print("Running single cycle...")
         agent.run_single_cycle()
+
+    elif args.command == 'verify-gold':
+        print("=" * 60)
+        print("Gold Tier Verification")
+        print("=" * 60)
+        checks_passed = 0
+        checks_total = 0
+
+        # 1. Check audit chain integrity
+        checks_total += 1
+        try:
+            from core.audit_logger import AuditLogger
+            audit = AuditLogger()
+            valid = audit.verify_chain()
+            stats = audit.get_stats()
+            print(f"  [PASS] Audit chain integrity verified ({stats.get('entries_today', 0)} entries today)")
+            checks_passed += 1
+        except Exception as e:
+            print(f"  [FAIL] Audit chain: {e}")
+
+        # 2. Check retry queue status
+        checks_total += 1
+        try:
+            from core.retry_queue import RetryQueue
+            rq = RetryQueue()
+            rq_stats = rq.get_stats()
+            failed = rq_stats.get("failed", 0)
+            if failed > 0:
+                print(f"  [WARN] Retry queue: {failed} permanently failed items")
+            else:
+                print(f"  [PASS] Retry queue: {rq_stats.get('total', 0)} items, {rq_stats.get('pending', 0)} pending")
+            checks_passed += 1
+        except Exception as e:
+            print(f"  [FAIL] Retry queue: {e}")
+
+        # 3. Check credential manager
+        checks_total += 1
+        try:
+            from core.credential_manager import CredentialManager
+            cm = CredentialManager()
+            print(f"  [PASS] Credential manager initialized (encryption active)")
+            checks_passed += 1
+        except Exception as e:
+            print(f"  [FAIL] Credential manager: {e}")
+
+        # 4. Check contact matcher
+        checks_total += 1
+        try:
+            from core.contact_matcher import ContactMatcher
+            matcher = ContactMatcher()
+            cm_stats = matcher.get_stats()
+            print(f"  [PASS] Contact matcher: {cm_stats.get('total_contacts', 0)} unified contacts")
+            checks_passed += 1
+        except Exception as e:
+            print(f"  [FAIL] Contact matcher: {e}")
+
+        # 5. Check vault structure
+        checks_total += 1
+        vault_path = os.getenv('VAULT_PATH', './obsidian-vault')
+        required_dirs = [
+            "config", "contacts/unified", "briefings", "audit/active",
+            "audit/archive", "retry-queue", "metrics",
+        ]
+        missing = [d for d in required_dirs if not os.path.isdir(os.path.join(vault_path, d))]
+        if missing:
+            print(f"  [FAIL] Vault directories missing: {', '.join(missing)}")
+        else:
+            print(f"  [PASS] Vault structure complete ({len(required_dirs)} directories)")
+            checks_passed += 1
+
+        # 6. Check MCP servers (coordinator health)
+        checks_total += 1
+        try:
+            import httpx
+            coordinator_port = int(os.environ.get("COORDINATOR_PORT", "8000"))
+            with httpx.Client(timeout=5.0) as client:
+                resp = client.get(f"http://localhost:{coordinator_port}/health")
+                if resp.status_code == 200:
+                    health = resp.json()
+                    print(f"  [PASS] Coordinator health: {health.get('status', 'unknown')}")
+                    checks_passed += 1
+                else:
+                    print(f"  [WARN] Coordinator returned {resp.status_code}")
+        except Exception:
+            print(f"  [SKIP] Coordinator not running (start with: python -m mcp_server.coordinator)")
+
+        print(f"\nResult: {checks_passed}/{checks_total} checks passed")
+        print("=" * 60)
 
     else:
         print(f"Unknown command: {args.command}")

@@ -597,32 +597,48 @@ async def twitter_reply_dm(request: ReplyMessageRequest):
 
 @app.post("/action/execute")
 async def action_execute(request: dict):
-    """Execute an action routed from the coordinator."""
+    """Execute an action routed from the coordinator. Integrates with RetryQueue (T071)."""
     action_type = request.get("actionType", "")
     approval_ref = request.get("approvalRef", "")
     payload = request.get("payload", {})
 
-    if action_type.startswith("meta."):
-        if action_type == "meta.post.create":
-            req = CreatePostRequest(
-                approvalRef=approval_ref,
-                content=payload.get("content", ""),
-                platforms=payload.get("platforms", ["facebook"]),
-            )
-            result = await meta_create_post(req)
-            return {"success": True, "result": result.dict()}
+    try:
+        if action_type.startswith("meta."):
+            if action_type == "meta.post.create":
+                req = CreatePostRequest(
+                    approvalRef=approval_ref,
+                    content=payload.get("content", ""),
+                    platforms=payload.get("platforms", ["facebook"]),
+                )
+                result = await meta_create_post(req)
+                return {"success": True, "result": result.dict()}
 
-    elif action_type.startswith("twitter."):
-        if action_type == "twitter.tweet.create":
-            req = CreatePostRequest(
-                approvalRef=approval_ref,
-                content=payload.get("content", ""),
-                platforms=["twitter"],
-            )
-            result = await twitter_create_tweet(req)
-            return {"success": True, "result": result.dict()}
+        elif action_type.startswith("twitter."):
+            if action_type == "twitter.tweet.create":
+                req = CreatePostRequest(
+                    approvalRef=approval_ref,
+                    content=payload.get("content", ""),
+                    platforms=["twitter"],
+                )
+                result = await twitter_create_tweet(req)
+                return {"success": True, "result": result.dict()}
 
-    return {"success": False, "error": f"Unknown action type: {action_type}"}
+        return {"success": False, "error": f"Unknown action type: {action_type}"}
+
+    except Exception as e:
+        # Queue for retry on failure (FR-020)
+        try:
+            from core.retry_queue import RetryQueue
+            retry_queue = RetryQueue()
+            retry_queue.add(
+                action_type=action_type,
+                action_payload=payload,
+                failure_reason=str(e),
+                approval_ref=approval_ref,
+            )
+        except ImportError:
+            pass
+        return {"success": False, "error": str(e), "queued_for_retry": True}
 
 
 def run_social_server(host: str = "0.0.0.0", port: int = 8002):

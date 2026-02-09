@@ -19,16 +19,20 @@ export function WatcherStatusGrid() {
     { name: "Gmail", href: "/gmail", description: "Email monitoring", connected: false, mock_mode: true },
     { name: "LinkedIn", href: "/linkedin", description: "LinkedIn activity", connected: false, mock_mode: true },
     { name: "WhatsApp", href: "/whatsapp", description: "WhatsApp messages", connected: false, mock_mode: true },
+    { name: "Facebook", href: "/social", description: "Facebook pages", connected: false, mock_mode: true },
+    { name: "Instagram", href: "/social", description: "Instagram feed", connected: false, mock_mode: true },
+    { name: "Twitter", href: "/social", description: "Twitter/X mentions", connected: false, mock_mode: true },
   ]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function fetchStatuses() {
       try {
-        const [gmailRes, linkedinRes, whatsappRes] = await Promise.all([
+        const [gmailRes, linkedinRes, whatsappRes, socialRes] = await Promise.all([
           fetch("/api/gmail/status").catch(() => null),
           fetch("/api/linkedin/status").catch(() => null),
           fetch("/api/whatsapp/status").catch(() => null),
+          fetch("/api/social/status").catch(() => null),
         ]);
 
         const newWatchers = [...watchers];
@@ -61,6 +65,20 @@ export function WatcherStatusGrid() {
             mock_mode: data.mock_mode ?? true,
             last_check: data.last_check,
           };
+        }
+
+        if (socialRes?.ok) {
+          const data = await socialRes.json();
+          const platforms = data.platforms ?? {};
+          if (platforms.facebook) {
+            newWatchers[3] = { ...newWatchers[3], connected: platforms.facebook.connected ?? false, mock_mode: platforms.facebook.mock_mode ?? true, last_check: platforms.facebook.last_check };
+          }
+          if (platforms.instagram) {
+            newWatchers[4] = { ...newWatchers[4], connected: platforms.instagram.connected ?? false, mock_mode: platforms.instagram.mock_mode ?? true, last_check: platforms.instagram.last_check };
+          }
+          if (platforms.twitter) {
+            newWatchers[5] = { ...newWatchers[5], connected: platforms.twitter.connected ?? false, mock_mode: platforms.twitter.mock_mode ?? true, last_check: platforms.twitter.last_check };
+          }
         }
 
         setWatchers(newWatchers);
@@ -110,7 +128,7 @@ export function WatcherStatusGrid() {
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {watchers.map((watcher) => (
             <a
               key={watcher.name}

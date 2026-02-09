@@ -82,6 +82,26 @@ class FacebookSkill(BaseSkill):
         except Exception as e:
             return SkillResult(success=False, error=str(e))
 
+    def _sync_contacts(self, messages: list) -> None:
+        """T081: Sync message senders to unified contact registry."""
+        try:
+            from core.contact_matcher import ContactMatcher
+            matcher = ContactMatcher()
+            for msg in messages:
+                sender = msg.get("from", {})
+                name = sender.get("name", "")
+                fb_id = sender.get("id", "")
+                email = sender.get("email", "")
+                if fb_id and (name or email):
+                    matcher.create_or_update(
+                        email=email or f"{fb_id}@facebook.placeholder",
+                        display_name=name,
+                        platform="facebook",
+                        platform_id=fb_id,
+                    )
+        except (ImportError, Exception):
+            pass
+
     async def _get_messages(self, input_data: Dict[str, Any]) -> SkillResult:
         if not httpx:
             return self._mock_messages()
@@ -93,7 +113,9 @@ class FacebookSkill(BaseSkill):
                     params["since"] = since
                 resp = await client.get(f"{self._social_mcp_url}/meta/messages", params=params)
                 if resp.status_code == 200:
-                    return SkillResult(success=True, data={"messages": resp.json()})
+                    data = resp.json()
+                    self._sync_contacts(data if isinstance(data, list) else data.get("messages", []))
+                    return SkillResult(success=True, data={"messages": data})
                 return SkillResult(success=False, error=f"API error: {resp.status_code}")
         except Exception:
             return self._mock_messages()
