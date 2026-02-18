@@ -1,0 +1,294 @@
+{
+  "categories": [
+    "entertainment",
+    "productivity",
+    "cloud",
+    "design",
+    "communication",
+    "security",
+    "finance",
+    "ai",
+    "developer",
+    "marketing",
+    "storage",
+    "education",
+    "other"
+  ],
+  "duplicate_groups": {
+    "video_streaming": ["Netflix", "Disney+", "Hulu", "HBO Max", "Amazon Prime Video", "Apple TV+", "Paramount+"],
+    "music_streaming": ["Spotify", "Apple Music", "YouTube Music", "Tidal"],
+    "cloud_storage": ["Google One", "Dropbox", "iCloud+", "OneDrive"],
+    "project_management": ["Notion", "Asana", "Monday.com", "ClickUp", "Trello"],
+    "communication": ["Slack", "Microsoft Teams", "Discord Nitro", "Zoom"],
+    "design": ["Figma", "Adobe Creative Cloud", "Canva Pro", "Sketch"],
+    "password_manager": ["1Password", "LastPass", "Dashlane", "Bitwarden"],
+    "vpn": ["NordVPN", "ExpressVPN", "Surfshark"],
+    "ai_assistant": ["ChatGPT Plus", "Claude Pro", "GitHub Copilot", "Gemini Advanced"]
+  },
+  "vendors": [
+    {
+      "canonical": "Netflix",
+      "patterns": ["netflix", "netflix.com", "netflix inc", "netflix international"],
+      "category": "entertainment",
+      "typical_monthly": [6.99, 15.49, 22.99]
+    },
+    {
+      "canonical": "Spotify",
+      "patterns": ["spotify", "spotify.com", "spotify ab", "spotify usa"],
+      "category": "entertainment",
+      "typical_monthly": [5.99, 10.99, 16.99]
+    },
+    {
+      "canonical": "Disney+",
+      "patterns": ["disney+", "disney plus", "disneyplus", "disney streaming", "the walt disney"],
+      "category": "entertainment",
+      "typical_monthly": [7.99, 13.99]
+    },
+    {
+      "canonical": "Hulu",
+      "patterns": ["hulu", "hulu llc"],
+      "category": "entertainment",
+      "typical_monthly": [7.99, 17.99]
+    },
+    {
+      "canonical": "HBO Max",
+      "patterns": ["hbo max", "hbo", "max.com", "warner bros discovery"],
+      "category": "entertainment",
+      "typical_monthly": [9.99, 15.99]
+    },
+    {
+      "canonical": "Amazon Prime",
+      "patterns": ["amazon prime", "prime video", "amzn", "amazon digital"],
+      "category": "entertainment",
+      "typical_monthly": [14.99]
+    },
+    {
+      "canonical": "Apple TV+",
+      "patterns": ["apple tv", "apple tv+", "apple.com/bill"],
+      "category": "entertainment",
+      "typical_monthly": [9.99]
+    },
+    {
+      "canonical": "YouTube Premium",
+      "patterns": ["youtube premium", "youtube music", "google youtube"],
+      "category": "entertainment",
+      "typical_monthly": [13.99]
+    },
+    {
+      "canonical": "Adobe Creative Cloud",
+      "patterns": ["adobe", "adobe creative", "adobe systems", "adobe inc"],
+      "category": "design",
+      "typical_monthly": [9.99, 22.99, 54.99]
+    },
+    {
+      "canonical": "Figma",
+      "patterns": ["figma", "figma inc"],
+      "category": "design",
+      "typical_monthly": [12.00, 45.00]
+    },
+    {
+      "canonical": "Canva Pro",
+      "patterns": ["canva", "canva pro", "canva pty"],
+      "category": "design",
+      "typical_monthly": [12.99]
+    },
+    {
+      "canonical": "Sketch",
+      "patterns": ["sketch", "sketch bv", "bohemian coding"],
+      "category": "design",
+      "typical_monthly": [10.00]
+    },
+    {
+      "canonical": "Notion",
+      "patterns": ["notion", "notion.so", "notion labs"],
+      "category": "productivity",
+      "typical_monthly": [8.00, 10.00, 15.00]
+    },
+    {
+      "canonical": "Slack",
+      "patterns": ["slack", "slack technologies", "slack.com"],
+      "category": "communication",
+      "typical_monthly": [7.25, 12.50]
+    },
+    {
+      "canonical": "Zoom",
+      "patterns": ["zoom", "zoom.us", "zoom video communications"],
+      "category": "communication",
+      "typical_monthly": [13.33, 18.33]
+    },
+    {
+      "canonical": "Microsoft 365",
+      "patterns": ["microsoft 365", "microsoft office", "office 365", "ms 365", "microsoft corporation"],
+      "category": "productivity",
+      "typical_monthly": [6.99, 9.99, 12.99]
+    },
+    {
+      "canonical": "Google Workspace",
+      "patterns": ["google workspace", "g suite", "google.com/charge", "google llc"],
+      "category": "productivity",
+      "typical_monthly": [6.00, 12.00, 18.00]
+    },
+    {
+      "canonical": "Dropbox",
+      "patterns": ["dropbox", "dropbox inc"],
+      "category": "storage",
+      "typical_monthly": [11.99, 19.99]
+    },
+    {
+      "canonical": "Google One",
+      "patterns": ["google one", "google storage"],
+      "category": "storage",
+      "typical_monthly": [1.99, 2.99, 9.99]
+    },
+    {
+      "canonical": "iCloud+",
+      "patterns": ["icloud", "icloud+", "apple icloud"],
+      "category": "storage",
+      "typical_monthly": [0.99, 2.99, 9.99]
+    },
+    {
+      "canonical": "GitHub",
+      "patterns": ["github", "github inc", "github.com"],
+      "category": "developer",
+      "typical_monthly": [4.00, 21.00]
+    },
+    {
+      "canonical": "GitHub Copilot",
+      "patterns": ["github copilot", "copilot individual", "copilot business"],
+      "category": "ai",
+      "typical_monthly": [10.00, 19.00]
+    },
+    {
+      "canonical": "ChatGPT Plus",
+      "patterns": ["chatgpt", "openai", "chatgpt plus", "openai.com"],
+      "category": "ai",
+      "typical_monthly": [20.00]
+    },
+    {
+      "canonical": "Claude Pro",
+      "patterns": ["claude pro", "anthropic", "claude.ai"],
+      "category": "ai",
+      "typical_monthly": [20.00]
+    },
+    {
+      "canonical": "Gemini Advanced",
+      "patterns": ["gemini advanced", "google ai premium", "google one ai"],
+      "category": "ai",
+      "typical_monthly": [19.99]
+    },
+    {
+      "canonical": "AWS",
+      "patterns": ["aws", "amazon web services", "amazonaws"],
+      "category": "cloud",
+      "typical_monthly": []
+    },
+    {
+      "canonical": "Google Cloud",
+      "patterns": ["google cloud", "gcp", "cloud.google"],
+      "category": "cloud",
+      "typical_monthly": []
+    },
+    {
+      "canonical": "Azure",
+      "patterns": ["azure", "microsoft azure"],
+      "category": "cloud",
+      "typical_monthly": []
+    },
+    {
+      "canonical": "Vercel",
+      "patterns": ["vercel", "vercel inc"],
+      "category": "developer",
+      "typical_monthly": [20.00]
+    },
+    {
+      "canonical": "Netlify",
+      "patterns": ["netlify", "netlify inc"],
+      "category": "developer",
+      "typical_monthly": [19.00]
+    },
+    {
+      "canonical": "Heroku",
+      "patterns": ["heroku", "salesforce heroku"],
+      "category": "developer",
+      "typical_monthly": [5.00, 25.00]
+    },
+    {
+      "canonical": "1Password",
+      "patterns": ["1password", "agilebits"],
+      "category": "security",
+      "typical_monthly": [2.99, 7.99]
+    },
+    {
+      "canonical": "LastPass",
+      "patterns": ["lastpass", "logmein lastpass"],
+      "category": "security",
+      "typical_monthly": [3.00, 4.00]
+    },
+    {
+      "canonical": "NordVPN",
+      "patterns": ["nordvpn", "nord security", "nordsec"],
+      "category": "security",
+      "typical_monthly": [3.99, 12.99]
+    },
+    {
+      "canonical": "Asana",
+      "patterns": ["asana", "asana inc"],
+      "category": "productivity",
+      "typical_monthly": [10.99, 24.99]
+    },
+    {
+      "canonical": "Monday.com",
+      "patterns": ["monday.com", "monday", "dapulse"],
+      "category": "productivity",
+      "typical_monthly": [8.00, 10.00, 16.00]
+    },
+    {
+      "canonical": "Trello",
+      "patterns": ["trello", "atlassian trello"],
+      "category": "productivity",
+      "typical_monthly": [5.00, 10.00]
+    },
+    {
+      "canonical": "ClickUp",
+      "patterns": ["clickup", "mango technologies"],
+      "category": "productivity",
+      "typical_monthly": [7.00, 12.00]
+    },
+    {
+      "canonical": "Jira",
+      "patterns": ["jira", "atlassian jira", "atlassian"],
+      "category": "developer",
+      "typical_monthly": [7.75, 15.25]
+    },
+    {
+      "canonical": "Linear",
+      "patterns": ["linear", "linear.app"],
+      "category": "developer",
+      "typical_monthly": [8.00]
+    },
+    {
+      "canonical": "Mailchimp",
+      "patterns": ["mailchimp", "intuit mailchimp"],
+      "category": "marketing",
+      "typical_monthly": [13.00, 20.00, 350.00]
+    },
+    {
+      "canonical": "Grammarly",
+      "patterns": ["grammarly", "grammarly inc"],
+      "category": "productivity",
+      "typical_monthly": [12.00, 15.00]
+    },
+    {
+      "canonical": "Discord Nitro",
+      "patterns": ["discord nitro", "discord inc", "discord"],
+      "category": "communication",
+      "typical_monthly": [4.99, 9.99]
+    },
+    {
+      "canonical": "Calendly",
+      "patterns": ["calendly", "calendly llc"],
+      "category": "productivity",
+      "typical_monthly": [8.00, 16.00]
+    }
+  ]
+}

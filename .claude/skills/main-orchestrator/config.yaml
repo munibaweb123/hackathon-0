@@ -1,0 +1,58 @@
+vault_path: "./obsidian-vault"
+dev_mode: true
+dry_run: true
+
+processes:
+  gmail-watcher:
+    command: "uv run .claude/skills/gmail-watcher/gmail_watcher.py --vault-path {vault} --monitor"
+    enabled: true
+  whatsapp-watcher:
+    command: "uv run .claude/skills/whatsapp-watcher/whatsapp_watcher.py --vault-path {vault} --monitor"
+    enabled: true
+  filesystem-watcher:
+    command: "uv run .claude/skills/filesystem-watcher/filesystem_watcher.py --vault-path {vault} --watch"
+    enabled: true
+  approval-manager:
+    command: "uv run .claude/skills/approval-manager/approval_manager.py --vault-path {vault} --monitor"
+    enabled: true
+  health-monitor:
+    command: "uv run .claude/skills/health-monitor/health_monitor.py --vault-path {vault} --monitor"
+    enabled: true
+
+schedules:
+  morning-briefing:
+    description: "Morning briefing summary"
+    cron: "0 8 * * *"
+    command: "uv run .claude/skills/ceo-briefing-generator/briefing_generator.py --vault-path {vault} --once --summary"
+    enabled: true
+  ceo-briefing:
+    description: "Full CEO briefing generation"
+    cron: "0 23 * * 0"
+    command: "uv run .claude/skills/ceo-briefing-generator/briefing_generator.py --vault-path {vault} --once"
+    enabled: true
+  subscription-audit:
+    description: "Monthly subscription audit"
+    cron: "0 9 1 * *"
+    command: "uv run .claude/skills/subscription-audit/subscription_audit.py --vault-path {vault}"
+    enabled: true
+  health-check:
+    description: "Periodic sync health check"
+    cron: "0 */2 * * *"
+    command: "uv run .claude/skills/health-monitor/health_monitor.py --vault-path {vault} --once"
+    enabled: true
+
+task_processing:
+  poll_interval: 10
+  max_concurrent: 3
+  priority_map:
+    ALERT: 0
+    WHATSAPP: 1
+    EMAIL: 2
+    FILE: 3
+    TASK: 4
+    NOTIFY: 5
+
+claude:
+  command: "claude"
+  timeout: 300
+  max_concurrent: 1
