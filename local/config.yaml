@@ -1,0 +1,100 @@
+agent:
+  id: "local-001"
+  zone: "local"
+  version: "1.0.0"
+
+vault:
+  path: "../obsidian-vault"
+  git_remote: "origin"
+  sync_interval_seconds: 300
+  sync_on_startup: true
+
+credentials:
+  store_path: "./credentials/sensitive-tokens.enc"
+  encryption_key_env: "CREDENTIAL_KEY"
+  allowed_scopes:
+    gmail: "gmail.send,gmail.compose,gmail.readonly"
+    linkedin: "w_member_social,r_liteprofile"
+    twitter: "tweet.write,tweet.read,users.read"
+    facebook: "pages_manage_posts,pages_read_engagement"
+    stripe: "full"
+    paypal: "full"
+    bank: "full"
+    whatsapp: "full"
+
+processes:
+  - name: "approval-manager"
+    skill: "approval-manager"
+    command: "uv run ../.claude/skills/approval-manager/approval_manager.py --vault-path {vault} --monitor"
+    enabled: true
+    restart_on_failure: true
+    max_restarts: 3
+    backoff_base_seconds: 30
+
+  - name: "vault-sync"
+    skill: "vault-sync"
+    command: "uv run ../.claude/skills/vault-sync/vault_sync.py --vault-path {vault} --monitor"
+    enabled: true
+    restart_on_failure: true
+    max_restarts: 10
+    backoff_base_seconds: 15
+
+  - name: "whatsapp-watcher"
+    skill: "whatsapp-watcher"
+    command: "uv run ../.claude/skills/whatsapp-watcher/whatsapp_watcher.py --vault-path {vault} --monitor"
+    enabled: true
+    restart_on_failure: true
+    max_restarts: 3
+    backoff_base_seconds: 60
+
+mcp_servers:
+  - name: "email-sender"
+    skill: "email-sender-mcp"
+    port: 3001
+    enabled: true
+
+  - name: "social-poster"
+    skill: "social-poster-mcp"
+    port: 3002
+    enabled: true
+
+  - name: "payment-handler"
+    skill: "payment-handler-mcp"
+    port: 3003
+    enabled: true
+
+security:
+  write_allowed_paths:
+    - "Pending_Approval/local/"
+    - "Approved/"
+    - "Done/"
+    - "Dashboard.md"
+    - "Logs/"
+    - "audit/local-"
+    - "Needs_Action/cloud/leads/"
+  write_denied_paths:
+    - "Drafts/"
+    - "Signals/"
+    - "Updates/"
+
+approval:
+  require_for:
+    - "email-send"
+    - "social-post"
+    - "payment-execute"
+    - "whatsapp-send"
+  payment_secondary_threshold: 1000
+  draft_expiration_hours: 48
+
+health:
+  check_interval_seconds: 60
+  alert_path: "Signals/health/"
+
+dashboard:
+  port: 3000
+  auto_open: true
+
+logging:
+  level: "INFO"
+  audit_log: "audit/local-audit.jsonl"
+  sync_log: "Logs/sync/"

@@ -1,0 +1,246 @@
+# Agent Configuration Schema: Platinum Tier AI Employee
+# Defines the structure of cloud/config.yaml and local/config.yaml
+# Date: 2026-02-18
+
+# ==============================================================================
+# CLOUD AGENT CONFIG (cloud/config.yaml)
+# ==============================================================================
+
+cloud_agent_config:
+  agent:
+    id: "cloud-001"
+    zone: "cloud"
+    version: "1.0.0"
+
+  vault:
+    path: "/path/to/obsidian-vault"
+    git_remote: "origin"
+    sync_interval_seconds: 300
+    sync_on_startup: true
+
+  credentials:
+    store_path: "./credentials/readonly-tokens.enc"
+    encryption_key_env: "CREDENTIAL_KEY"
+    allowed_scopes:
+      gmail: "gmail.readonly"
+      linkedin: "r_liteprofile,r_organization_social"
+      twitter: "tweet.read,users.read"
+      facebook: "pages_read_engagement"
+
+  processes:
+    - name: "gmail-watcher"
+      skill: "gmail-watcher"
+      enabled: true
+      restart_on_failure: true
+      max_restarts: 3
+      backoff_base_seconds: 30
+
+    - name: "health-monitor"
+      skill: "health-monitor"
+      enabled: true
+      restart_on_failure: true
+      max_restarts: 5
+      backoff_base_seconds: 10
+
+    - name: "vault-sync"
+      skill: "vault-sync"
+      enabled: true
+      restart_on_failure: true
+      max_restarts: 10
+      backoff_base_seconds: 15
+
+    - name: "draft-expiration-sweeper"
+      skill: "draft-lifecycle"
+      enabled: true
+      schedule: "0 * * * *"  # Every hour
+
+  schedules:
+    - name: "monday-briefing"
+      skill: "ceo-briefing-generator"
+      cron: "0 7 * * 1"  # Monday 7:00 AM
+      enabled: true
+
+    - name: "subscription-audit"
+      skill: "subscription-audit"
+      cron: "0 8 1 * *"  # First of month, 8:00 AM
+      enabled: true
+
+  security:
+    write_allowed_paths:
+      - "Needs_Action/cloud/"
+      - "Drafts/"
+      - "Signals/"
+      - "Updates/"
+      - "Logs/"
+      - "audit/cloud-"
+    write_denied_paths:
+      - "Pending_Approval/"
+      - "Approved/"
+      - "Done/"
+      - "Dashboard.md"
+    sensitive_credential_paths: []  # Cloud has no sensitive creds
+
+  health:
+    check_interval_seconds: 60
+    cpu_threshold_percent: 80
+    memory_threshold_percent: 80
+    disk_threshold_percent: 90
+    alert_path: "Signals/health/"
+
+  logging:
+    level: "INFO"
+    audit_log: "audit/cloud-audit.jsonl"
+    sync_log: "Logs/sync/"
+
+# ==============================================================================
+# LOCAL AGENT CONFIG (local/config.yaml)
+# ==============================================================================
+
+local_agent_config:
+  agent:
+    id: "local-001"
+    zone: "local"
+    version: "1.0.0"
+
+  vault:
+    path: "/path/to/obsidian-vault"
+    git_remote: "origin"
+    sync_interval_seconds: 300
+    sync_on_startup: true
+
+  credentials:
+    store_path: "./credentials/sensitive-tokens.enc"
+    encryption_key_env: "CREDENTIAL_KEY"
+    allowed_scopes:
+      gmail: "gmail.send,gmail.compose,gmail.readonly"
+      linkedin: "w_member_social,r_liteprofile"
+      twitter: "tweet.write,tweet.read,users.read"
+      facebook: "pages_manage_posts,pages_read_engagement"
+      stripe: "full"
+      paypal: "full"
+      bank: "full"
+      whatsapp: "full"
+
+  processes:
+    - name: "approval-manager"
+      skill: "approval-manager"
+      enabled: true
+      restart_on_failure: true
+      max_restarts: 3
+      backoff_base_seconds: 30
+
+    - name: "vault-sync"
+      skill: "vault-sync"
+      enabled: true
+      restart_on_failure: true
+      max_restarts: 10
+      backoff_base_seconds: 15
+
+    - name: "whatsapp-watcher"
+      skill: "whatsapp-watcher"
+      enabled: true
+      restart_on_failure: true
+      max_restarts: 3
+      backoff_base_seconds: 60
+
+  mcp_servers:
+    - name: "email-sender"
+      skill: "email-sender-mcp"
+      port: 3001
+      enabled: true
+
+    - name: "social-poster"
+      skill: "social-poster-mcp"
+      port: 3002
+      enabled: true
+
+    - name: "payment-handler"
+      skill: "payment-handler-mcp"
+      port: 3003
+      enabled: true
+
+  security:
+    write_allowed_paths:
+      - "Pending_Approval/local/"
+      - "Approved/"
+      - "Done/"
+      - "Dashboard.md"
+      - "Logs/"
+      - "audit/local-"
+      - "Needs_Action/cloud/leads/"  # status updates
+    write_denied_paths:
+      - "Drafts/"
+      - "Signals/"
+      - "Updates/"
+    sensitive_credential_paths:
+      - "./credentials/sensitive-tokens.enc"
+
+  approval:
+    require_for:
+      - "email-send"
+      - "social-post"
+      - "payment-execute"
+      - "whatsapp-send"
+    payment_secondary_threshold: 1000  # Secondary confirmation above this amount
+    draft_expiration_hours: 48
+
+  health:
+    check_interval_seconds: 60
+    alert_path: "Signals/health/"
+
+  dashboard:
+    port: 3000
+    auto_open: true
+
+  logging:
+    level: "INFO"
+    audit_log: "audit/local-audit.jsonl"
+    sync_log: "Logs/sync/"
+
+# ==============================================================================
+# TOPOLOGY CONFIG (shared: topology.yaml)
+# ==============================================================================
+
+topology:
+  agents:
+    cloud:
+      skills:
+        - gmail-watcher
+        - health-monitor
+        - ceo-briefing-generator
+        - subscription-audit
+        - vault-sync
+        - draft-lifecycle
+      credential_scope: "readonly"
+
+    local:
+      skills:
+        - approval-manager
+        - email-sender-mcp
+        - social-poster-mcp
+        - payment-handler-mcp
+        - whatsapp-watcher
+        - invoice-generator
+        - vault-sync
+        - health-monitor
+      credential_scope: "full"
+
+  conflict_resolution:
+    rules:
+      - path: "Dashboard.md"
+        strategy: "local_wins"
+      - path: "Drafts/**"
+        strategy: "cloud_wins"
+      - path: "Signals/**"
+        strategy: "cloud_wins"
+      - path: "Approved/**"
+        strategy: "local_wins"
+      - path: "Done/**"
+        strategy: "local_wins"
+      - path: "Logs/**/*.json"
+        strategy: "append_both"
+      - path: "audit/**"
+        strategy: "append_both"
+      - path: "Updates/**"
+        strategy: "cloud_wins"
+    default: "manual_required"

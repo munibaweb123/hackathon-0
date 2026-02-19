@@ -4,6 +4,9 @@ Alert Sender — creates health alert notifications in the vault.
 Follows the same pattern as approval-manager's NotificationSender:
 creates Needs_Action/ markdown files with YAML frontmatter and
 deduplicates via a JSON log with configurable cooldown.
+
+Also writes signal files to Signals/health/ with health_alert_schema
+frontmatter (task T046).
 """
 
 import json
@@ -18,16 +21,28 @@ logger = logging.getLogger("health-monitor.alerts")
 
 class AlertSender:
     """
-    Sends health alerts by creating files in Needs_Action/.
+    Sends health alerts by creating files in Needs_Action/ and Signals/health/.
 
     Deduplicates alerts using Logs/health_alerts.json with a
     configurable cooldown period (default 30 minutes).
+
+    Signal files in Signals/health/ follow the health_alert_schema
+    frontmatter contract (task T046).
     """
+
+    SEVERITY_STATUS_MAP = {
+        "critical": "down",
+        "warning": "degraded",
+        "info": "healthy",
+    }
 
     def __init__(self, vault_path: str, cooldown_minutes: int = 30) -> None:
         self.vault_path = Path(vault_path)
         self.needs_action_dir = self.vault_path / "Needs_Action"
         self.needs_action_dir.mkdir(parents=True, exist_ok=True)
+
+        self.signals_health_dir = self.vault_path / "Signals" / "health"
+        self.signals_health_dir.mkdir(parents=True, exist_ok=True)
 
         self.logs_dir = self.vault_path / "Logs"
         self.logs_dir.mkdir(parents=True, exist_ok=True)
@@ -46,7 +61,8 @@ class AlertSender:
         details: Optional[Dict[str, Any]] = None,
     ) -> Optional[str]:
         """
-        Create a health alert file in Needs_Action/.
+        Create a health alert file in Needs_Action/ and a signal file
+        in Signals/health/.
 
         Args:
             severity: critical | warning | info
@@ -123,6 +139,9 @@ class AlertSender:
         content = "\n".join(frontmatter_lines) + "\n\n" + "\n".join(body_lines) + "\n"
         filepath.write_text(content, encoding="utf-8")
 
+        # Write signal file to Signals/health/ (T046)
+        self._write_signal_alert(severity, component, message, details, now)
+
         # Log the alert
         self._log_alert({
             "timestamp": now.isoformat(),
@@ -140,9 +159,7 @@ class AlertSender:
     def clear_alert(self, component: str) -> None:
         """
         Mark alerts for a component as auto-resolved in the log.
-
-        Does NOT remove the Needs_Action/ file — that's handled by
-        the approval/orchestrator pipeline.
+        Also updates the corresponding signal file status to "healthy".
         """
         alerts = self._load_alerts_log()
         updated = False
@@ -155,6 +172,7 @@ class AlertSender:
 
         if updated:
             self._save_alerts_log(alerts)
+            self._update_signal_status(component, "healthy")
             logger.info("Cleared alerts for component: %s", component)
 
     def get_active_alerts(self) -> List[Dict[str, Any]]:
@@ -170,6 +188,93 @@ class AlertSender:
         if component:
             alerts = [a for a in alerts if a.get("component") == component]
         return alerts[-limit:]
+
+    # ------------------------------------------------------------------
+    # Signal file writing (T046 — health_alert_schema)
+    # ------------------------------------------------------------------
+    def _write_signal_alert(
+        self,
+        severity: str,
+        component: str,
+        message: str,
+        details: Optional[Dict[str, Any]],
+        now: datetime,
+    ) -> Optional[str]:
+        """
+        Write a signal alert file to Signals/health/ with
+        health_alert_schema YAML frontmatter.
+        """
+        try:
+            timestamp_hex = format(int(now.timestamp()), "x")
+            alert_id = f"alert-{component}-{timestamp_hex}"
+            status = self.SEVERITY_STATUS_MAP.get(severity, "degraded")
+
+            if severity == "info" and "restarted" in message.lower():
+                action_taken = "auto-restart attempted"
+            elif severity == "critical":
+                action_taken = "restart failed or budget exhausted"
+            else:
+                action_taken = "none"
+
+            details_str = "~"
+            if details:
+                detail_parts = [f"{k}={v}" for k, v in details.items()]
+                details_str = "; ".join(detail_parts)
+
+            signal_lines = [
+                "---",
+                f"alert-id: {alert_id}",
+                f"service-name: {component}",
+                f"status: {status}",
+                f"severity: {severity}",
+                f"timestamp: {now.isoformat()}",
+                f"action-taken: {action_taken}",
+                f"details: {details_str}",
+                "---",
+                "",
+                f"# Health Signal: {component}",
+                "",
+                message,
+                "",
+            ]
+
+            signal_content = "\n".join(signal_lines)
+            signal_filename = f"{alert_id}.md"
+            signal_filepath = self.signals_health_dir / signal_filename
+            signal_filepath.write_text(signal_content, encoding="utf-8")
+
+            logger.info("Signal alert written: %s (status=%s)", alert_id, status)
+            return str(signal_filepath)
+
+        except OSError as e:
+            logger.error("Failed to write signal alert for %s: %s", component, e)
+            return None
+
+    def _update_signal_status(self, component: str, new_status: str) -> None:
+        """Update the most recent signal file for a component to a new status."""
+        try:
+            pattern = f"alert-{component}-*.md"
+            matching = sorted(self.signals_health_dir.glob(pattern))
+            if not matching:
+                return
+
+            latest = matching[-1]
+            content = latest.read_text(encoding="utf-8")
+
+            updated_lines = []
+            for line in content.split("\n"):
+                if line.startswith("status: "):
+                    updated_lines.append(f"status: {new_status}")
+                elif line.startswith("action-taken: ") and new_status == "healthy":
+                    updated_lines.append("action-taken: alert cleared — component recovered")
+                else:
+                    updated_lines.append(line)
+
+            latest.write_text("\n".join(updated_lines), encoding="utf-8")
+            logger.info("Signal status updated to '%s' for %s", new_status, component)
+
+        except OSError as e:
+            logger.error("Failed to update signal status for %s: %s", component, e)
 
     # ------------------------------------------------------------------
     # Deduplication

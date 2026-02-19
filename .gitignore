@@ -88,3 +88,13 @@ linkedin-posts.json
 vault/backup/
 vault/*.bak
 vault/*.backup
+node_modules/
+
+# Google OAuth client secret files (download from Google Cloud Console — never commit)
+client_secret_*.json
+
+# Vault runtime state (generated at runtime, not source-controlled)
+obsidian-vault/Needs_Action/
+obsidian-vault/Done/
+obsidian-vault/Signals/
+obsidian-vault/Logs/

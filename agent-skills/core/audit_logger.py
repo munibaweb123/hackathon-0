@@ -1,322 +1,285 @@
+# /// script
+# requires-python = ">=3.10"
+# dependencies = []
+# ///
 """
-Audit Logger
+Audit Logger — append-only JSONL audit log with SHA-256 hash chaining.
 
-Provides hash chain audit logging with tamper-evident integrity.
-Supports daily log rotation and 90-day retention policy.
+Provides tamper-evident audit logging for Cloud and Local agents.
+Each entry includes a SHA-256 hash of the previous entry, creating
+an immutable chain that can be verified for integrity.
 
-Supports Gold Tier requirements:
-- FR-024: Log all MCP actions with tamper-evident hashes
-- FR-025: Maintain hash chain integrity across entries
-- FR-026: Support audit log export for date ranges
-- FR-027: Log external API calls with request/response summaries
-- FR-027a: Retain audit logs in active storage for 90 days
-- FR-027b: Archive logs older than 90 days to cold storage
+Writes to: audit/{agent-id}-audit.jsonl
 """
 
-import os
+import hashlib
 import json
-import gzip
+import logging
+import time
+from datetime import datetime, timezone
 from pathlib import Path
-from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
-from threading import Lock
 
-from models.audit_entry import AuditEntry, ActorType, ActionResult
-
-
-class AuditLoggerError(Exception):
-    """Base exception for audit logger errors."""
-    pass
-
-
-class ChainIntegrityError(AuditLoggerError):
-    """Raised when hash chain integrity check fails."""
-    pass
+logger = logging.getLogger(__name__)
 
 
 class AuditLogger:
     """
-    Hash chain audit logger with tamper-evident integrity.
+    Append-only JSONL audit logger with SHA-256 hash chaining.
 
-    Maintains a chain of audit entries where each entry's hash
-    includes the previous entry's hash, creating an immutable
-    audit trail that can be verified for tampering.
-
-    Per FR-024-027: Comprehensive audit logging with hash chain
-    Per FR-027a/b: 90 days active, then archive
+    Each entry contains:
+    - timestamp (ISO 8601)
+    - agent_id
+    - zone (cloud/local)
+    - action (what happened)
+    - target (what was acted upon)
+    - details (optional metadata dict)
+    - prev_hash (SHA-256 of previous entry)
+    - hash (SHA-256 of this entry)
     """
 
-    ACTIVE_RETENTION_DAYS = 90
-
-    def __init__(self, vault_path: Optional[str] = None):
-        """
-        Initialize audit logger.
-
-        Args:
-            vault_path: Path to vault directory. Defaults to VAULT_PATH env var.
-        """
-        self.vault_path = vault_path or os.environ.get("VAULT_PATH", "./obsidian-vault")
-        self._lock = Lock()
-        self._last_hash: Optional[str] = None
-        self._ensure_directories()
-
-    def _ensure_directories(self) -> None:
-        """Ensure audit directories exist."""
-        active_dir = Path(self.vault_path) / "audit" / "active"
-        archive_dir = Path(self.vault_path) / "audit" / "archive"
-        active_dir.mkdir(parents=True, exist_ok=True)
-        archive_dir.mkdir(parents=True, exist_ok=True)
-
-    def _get_active_log_path(self, date: Optional[datetime] = None) -> Path:
-        """Get path to active log file for a date."""
-        if date is None:
-            date = datetime.utcnow()
-        filename = f"{date.strftime('%Y-%m-%d')}.jsonl"
-        return Path(self.vault_path) / "audit" / "active" / filename
-
-    def _get_archive_path(self, year_month: str) -> Path:
-        """Get path to archive file for a year-month."""
-        filename = f"{year_month}.jsonl.gz"
-        return Path(self.vault_path) / "audit" / "archive" / filename
-
-    def _get_last_hash(self, date: Optional[datetime] = None) -> str:
-        """Get hash of the last entry in the chain."""
-        if self._last_hash:
-            return self._last_hash
-
-        log_path = self._get_active_log_path(date)
-        if not log_path.exists():
-            return "GENESIS"
-
-        # Read the last line
-        with open(log_path, "r") as f:
-            last_line = None
-            for line in f:
-                if line.strip():
-                    last_line = line
-
-        if last_line:
-            entry_data = json.loads(last_line)
-            return entry_data.get("hash", "GENESIS")
-
-        return "GENESIS"
-
-    def append(
+    def __init__(
         self,
-        action_type: str,
-        actor: ActorType,
-        server_id: str,
-        details: Dict[str, Any],
-        result: ActionResult,
-        approval_ref: Optional[str] = None,
-        error_message: Optional[str] = None,
-        latency_ms: Optional[int] = None,
-    ) -> AuditEntry:
+        agent_id: str,
+        zone: str,
+        vault_path: str,
+    ) -> None:
+        self.agent_id = agent_id
+        self.zone = zone
+        self.vault_path = Path(vault_path).resolve()
+        self.log_path = self.vault_path / "audit" / f"{agent_id}-audit.jsonl"
+        self.log_path.parent.mkdir(parents=True, exist_ok=True)
+        self._last_hash: Optional[str] = None
+        self._init_chain()
+
+    def _init_chain(self) -> None:
+        """Initialize hash chain from existing log file."""
+        if not self.log_path.exists() or self.log_path.stat().st_size == 0:
+            self._last_hash = "GENESIS"
+            return
+        # Read last line to get previous hash
+        last_line = ""
+        with open(self.log_path, "r", encoding="utf-8") as f:
+            for line in f:
+                stripped = line.strip()
+                if stripped:
+                    last_line = stripped
+        if last_line:
+            try:
+                entry = json.loads(last_line)
+                self._last_hash = entry.get("hash", "GENESIS")
+            except json.JSONDecodeError:
+                self._last_hash = "GENESIS"
+        else:
+            self._last_hash = "GENESIS"
+
+    @staticmethod
+    def _compute_hash(entry_data: Dict[str, Any], prev_hash: str) -> str:
+        """Compute SHA-256 hash for an entry including the previous hash."""
+        payload = json.dumps(
+            {
+                "timestamp": entry_data["timestamp"],
+                "agent_id": entry_data["agent_id"],
+                "zone": entry_data["zone"],
+                "action": entry_data["action"],
+                "target": entry_data["target"],
+                "details": entry_data.get("details"),
+                "prev_hash": prev_hash,
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+    def log(
+        self,
+        action: str,
+        target: str,
+        details: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
         """
-        Append a new entry to the audit log.
+        Append an audit entry to the log.
 
         Args:
-            action_type: Type of action (e.g., "xero.invoice.create")
-            actor: Who performed the action
-            server_id: MCP server that processed the action
-            details: Action-specific details (will be scrubbed for credentials)
-            result: Outcome of the action
-            approval_ref: Reference to approval file if applicable
-            error_message: Error details if failed
-            latency_ms: API call latency if applicable
+            action: What happened (e.g., "agent-started", "draft-created", "file-written").
+            target: What was acted upon (e.g., file path, process name).
+            details: Optional metadata dict.
 
         Returns:
-            The created AuditEntry
+            The complete entry dict that was written.
         """
-        with self._lock:
-            # Scrub credentials from details
-            scrubbed_details = AuditEntry.scrub_credentials(details)
+        entry_data = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "agent_id": self.agent_id,
+            "zone": self.zone,
+            "action": action,
+            "target": target,
+            "details": details,
+            "prev_hash": self._last_hash,
+        }
+        entry_hash = self._compute_hash(entry_data, self._last_hash)
+        entry_data["hash"] = entry_hash
+        self._last_hash = entry_hash
 
-            # Get previous hash
-            prev_hash = self._get_last_hash()
+        with open(self.log_path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(entry_data, separators=(",", ":")) + "\n")
 
-            # Create entry
-            entry = AuditEntry(
-                action_type=action_type,
-                actor=actor,
-                server_id=server_id,
-                approval_ref=approval_ref,
-                details=scrubbed_details,
-                result=result,
-                error_message=error_message,
-                latency_ms=latency_ms,
-                prev_hash=prev_hash,
-            )
+        logger.debug("Audit: %s %s → %s", action, target, entry_hash[:12])
+        return entry_data
 
-            # Write to log
-            log_path = self._get_active_log_path()
-            with open(log_path, "a") as f:
-                f.write(json.dumps(entry.to_dict()) + "\n")
-
-            # Update cached last hash
-            self._last_hash = entry.hash
-
-            return entry
-
-    def verify_chain(self, date: Optional[datetime] = None) -> bool:
+    def verify_chain(self) -> bool:
         """
-        Verify hash chain integrity for a log file.
-
-        Args:
-            date: Date of log to verify. Defaults to today.
+        Verify the integrity of the entire hash chain.
 
         Returns:
-            True if chain is valid, raises ChainIntegrityError otherwise
+            True if chain is valid.
+
+        Raises:
+            ValueError: If a hash mismatch is detected (tamper evidence).
         """
-        log_path = self._get_active_log_path(date)
-        if not log_path.exists():
-            return True  # Empty log is valid
+        if not self.log_path.exists():
+            return True
 
         prev_hash = "GENESIS"
+        line_num = 0
 
-        with open(log_path, "r") as f:
-            for line_num, line in enumerate(f, 1):
-                if not line.strip():
+        with open(self.log_path, "r", encoding="utf-8") as f:
+            for line in f:
+                stripped = line.strip()
+                if not stripped:
                     continue
-
+                line_num += 1
                 try:
-                    entry_data = json.loads(line)
-                    entry = AuditEntry.from_dict(entry_data)
-
-                    # Verify entry's prev_hash matches
-                    if entry.prev_hash != prev_hash:
-                        raise ChainIntegrityError(
-                            f"Chain broken at line {line_num}: "
-                            f"expected prev_hash {prev_hash}, got {entry.prev_hash}"
-                        )
-
-                    # Verify entry's own hash
-                    if not entry.verify_hash():
-                        raise ChainIntegrityError(
-                            f"Hash mismatch at line {line_num}: entry ID {entry.id}"
-                        )
-
-                    prev_hash = entry.hash
-
+                    entry = json.loads(stripped)
                 except json.JSONDecodeError as e:
-                    raise ChainIntegrityError(f"Invalid JSON at line {line_num}: {e}")
+                    raise ValueError(f"Line {line_num}: invalid JSON — {e}")
 
+                # Verify prev_hash links
+                if entry.get("prev_hash") != prev_hash:
+                    raise ValueError(
+                        f"Line {line_num}: chain broken — "
+                        f"expected prev_hash={prev_hash[:12]}..., "
+                        f"got={entry.get('prev_hash', 'MISSING')[:12]}..."
+                    )
+
+                # Verify entry's own hash
+                expected = self._compute_hash(entry, prev_hash)
+                if entry.get("hash") != expected:
+                    raise ValueError(
+                        f"Line {line_num}: hash mismatch — "
+                        f"expected={expected[:12]}..., got={entry.get('hash', 'MISSING')[:12]}..."
+                    )
+
+                prev_hash = entry["hash"]
+
+        logger.info("Audit chain verified: %d entries, integrity OK", line_num)
         return True
 
-    def export(
+    def query(
         self,
-        start_date: datetime,
-        end_date: datetime,
-        action_types: Optional[List[str]] = None,
+        action: Optional[str] = None,
+        since: Optional[str] = None,
+        limit: int = 100,
     ) -> List[Dict[str, Any]]:
         """
-        Export audit entries for a date range.
+        Query audit log entries with optional filters.
 
         Args:
-            start_date: Start of date range (inclusive)
-            end_date: End of date range (inclusive)
-            action_types: Optional filter for specific action types
+            action: Filter by action type.
+            since: ISO 8601 timestamp — return entries after this time.
+            limit: Maximum number of entries to return.
 
         Returns:
-            List of audit entry dictionaries
+            List of matching entry dicts (most recent first).
         """
-        entries = []
-        current = start_date
+        if not self.log_path.exists():
+            return []
 
-        while current <= end_date:
-            log_path = self._get_active_log_path(current)
+        entries: List[Dict[str, Any]] = []
+        with open(self.log_path, "r", encoding="utf-8") as f:
+            for line in f:
+                stripped = line.strip()
+                if not stripped:
+                    continue
+                try:
+                    entry = json.loads(stripped)
+                except json.JSONDecodeError:
+                    continue
 
-            if log_path.exists():
-                with open(log_path, "r") as f:
-                    for line in f:
-                        if not line.strip():
-                            continue
-                        entry_data = json.loads(line)
+                if action and entry.get("action") != action:
+                    continue
+                if since and entry.get("timestamp", "") < since:
+                    continue
 
-                        # Filter by action type if specified
-                        if action_types:
-                            if entry_data.get("action_type") not in action_types:
-                                continue
+                entries.append(entry)
 
-                        entries.append(entry_data)
+        # Most recent first, limited
+        return list(reversed(entries[-limit:]))
 
-            current += timedelta(days=1)
 
-        return entries
+# ------------------------------------------------------------------
+# CLI — standalone chain verification utility (T055)
+# ------------------------------------------------------------------
 
-    def archive_old_logs(self) -> int:
-        """
-        Archive logs older than retention period.
+def verify_audit_files(vault_path: str) -> None:
+    """
+    Verify integrity of all audit JSONL files in the vault.
 
-        Per FR-027a/b: Move logs > 90 days to cold storage.
+    Scans audit/*.jsonl and verifies SHA-256 hash chains.
+    """
+    vault = Path(vault_path).resolve()
+    audit_dir = vault / "audit"
+    if not audit_dir.exists():
+        print(f"No audit directory found at {audit_dir}")
+        return
 
-        Returns:
-            Number of files archived
-        """
-        active_dir = Path(self.vault_path) / "audit" / "active"
-        cutoff = datetime.utcnow() - timedelta(days=self.ACTIVE_RETENTION_DAYS)
-        archived_count = 0
+    files = sorted(audit_dir.glob("*-audit.jsonl"))
+    if not files:
+        print("No audit log files found.")
+        return
 
-        # Group files by year-month for archiving
-        files_by_month: Dict[str, List[Path]] = {}
+    all_ok = True
+    for log_file in files:
+        agent_id = log_file.stem.replace("-audit", "")
+        print(f"\nVerifying: {log_file.name}")
+        try:
+            al = AuditLogger.__new__(AuditLogger)
+            al.log_path = log_file
+            al.vault_path = vault
+            result = al.verify_chain()
+            if result:
+                # Count entries
+                count = sum(1 for line in log_file.read_text().splitlines() if line.strip())
+                print(f"  OK — {count} entries, chain intact")
+        except ValueError as e:
+            print(f"  FAIL — {e}")
+            all_ok = False
 
-        for log_file in active_dir.glob("*.jsonl"):
-            try:
-                # Parse date from filename
-                date_str = log_file.stem
-                file_date = datetime.strptime(date_str, "%Y-%m-%d")
+    print(f"\n{'All chains verified OK' if all_ok else 'ERRORS DETECTED — see above'}")
 
-                if file_date < cutoff:
-                    year_month = file_date.strftime("%Y-%m")
-                    if year_month not in files_by_month:
-                        files_by_month[year_month] = []
-                    files_by_month[year_month].append(log_file)
 
-            except ValueError:
-                continue
+def main() -> None:
+    """CLI entry point for audit log operations."""
+    import argparse
 
-        # Archive each month
-        for year_month, files in files_by_month.items():
-            archive_path = self._get_archive_path(year_month)
+    parser = argparse.ArgumentParser(description="Audit Logger — verification utility")
+    parser.add_argument("--vault-path", default="./obsidian-vault", help="Path to vault")
+    parser.add_argument("--verify", action="store_true", help="Verify all audit log chains")
+    parser.add_argument("--query", default=None, help="Query logs by action type")
+    parser.add_argument("--agent-id", default=None, help="Agent ID for query")
+    parser.add_argument("--limit", type=int, default=20, help="Max entries to show")
+    args = parser.parse_args()
 
-            # Combine all entries for the month
-            all_entries = []
-            for log_file in sorted(files):
-                with open(log_file, "r") as f:
-                    for line in f:
-                        if line.strip():
-                            all_entries.append(line)
+    if args.verify:
+        verify_audit_files(args.vault_path)
+    elif args.query and args.agent_id:
+        al = AuditLogger(agent_id=args.agent_id, zone="unknown", vault_path=args.vault_path)
+        entries = al.query(action=args.query, limit=args.limit)
+        for e in entries:
+            print(f"  [{e['timestamp']}] {e['action']} → {e['target']}")
+    else:
+        parser.print_help()
 
-            # Write compressed archive
-            with gzip.open(archive_path, "at") as f:
-                for entry in all_entries:
-                    f.write(entry)
 
-            # Delete original files
-            for log_file in files:
-                log_file.unlink()
-                archived_count += 1
-
-        return archived_count
-
-    def get_stats(self) -> Dict[str, Any]:
-        """Get audit log statistics."""
-        active_dir = Path(self.vault_path) / "audit" / "active"
-        archive_dir = Path(self.vault_path) / "audit" / "archive"
-
-        active_files = list(active_dir.glob("*.jsonl"))
-        archive_files = list(archive_dir.glob("*.jsonl.gz"))
-
-        # Count entries in today's log
-        today_path = self._get_active_log_path()
-        today_entries = 0
-        if today_path.exists():
-            with open(today_path, "r") as f:
-                today_entries = sum(1 for line in f if line.strip())
-
-        return {
-            "active_log_files": len(active_files),
-            "archive_files": len(archive_files),
-            "entries_today": today_entries,
-            "retention_days": self.ACTIVE_RETENTION_DAYS,
-        }
+if __name__ == "__main__":
+    main()

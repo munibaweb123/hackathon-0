@@ -35,12 +35,23 @@ class ConflictResolver:
 
     def __init__(self) -> None:
         self.default_rules: Dict[str, str] = {
+            # Cloud-wins (cloud is authoritative)
+            "Drafts/**": "cloud_wins",
+            "Signals/**": "cloud_wins",
+            "Needs_Action/cloud/**": "cloud_wins",
+            "Updates/**": "remote_wins",
+            # Local-wins (local is authoritative)
+            "Approved/**": "local_wins",
+            "Done/**": "local_wins",
+            "Pending_Approval/**": "local_wins",
             "Dashboard.md": "local_wins",
+            "In_Progress/**": "local_wins",
+            # Shared paths
             "Logs/*.json": "append_both",
             "Logs/**/*.json": "append_both",
+            "Logs/**/*.jsonl": "append_both",
+            "audit/**": "append_both",
             "config/*": "remote_wins",
-            "Updates/*.md": "remote_wins",
-            "In_Progress/**": "local_wins",
         }
         self.default_strategy = "newest_wins"
 
@@ -124,7 +135,7 @@ class ConflictResolver:
 
         if strategy == "local_wins":
             resolved = self._resolve_local_wins(content)
-        elif strategy == "remote_wins":
+        elif strategy in ("remote_wins", "cloud_wins"):
             resolved = self._resolve_remote_wins(content)
         elif strategy == "newest_wins":
             resolved = self._resolve_newest_wins(content)

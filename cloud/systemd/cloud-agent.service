@@ -1,0 +1,34 @@
+[Unit]
+Description=AI Employee Cloud Agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ai-employee
+Group=ai-employee
+WorkingDirectory=/opt/ai-employee
+ExecStart=/usr/local/bin/uv run cloud/agent.py --vault-path /opt/ai-employee/obsidian-vault
+Restart=always
+RestartSec=30
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+# Environment
+Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=-/opt/ai-employee/cloud/.env
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/ai-employee/obsidian-vault /tmp/ai-employee
+PrivateTmp=true
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=cloud-agent
+
+[Install]
+WantedBy=multi-user.target

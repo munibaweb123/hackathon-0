@@ -17,6 +17,11 @@ const navItems = [
   { href: "/briefings", label: "CEO Briefings", icon: "📊" },
   { href: "/contacts", label: "Contacts", icon: "👤" },
   { href: "/audit", label: "Audit Logs", icon: "📋" },
+  // Platinum Tier
+  { href: "/drafts", label: "Drafts", icon: "📝" },
+  { href: "/leads", label: "Lead Pipeline", icon: "🎯" },
+  { href: "/sync-status", label: "Sync Status", icon: "🔄" },
+  { href: "/agent-topology", label: "Agent Topology", icon: "🖧" },
   { href: "/settings", label: "Settings", icon: "⚙" },
 ];
 
@@ -28,7 +33,7 @@ export function Sidebar() {
       <div className="flex h-14 items-center border-b px-4">
         <h1 className="text-lg font-semibold">AI Employee</h1>
         <span className="ml-2 rounded bg-primary/10 px-2 py-0.5 text-xs text-primary">
-          Gold Tier
+          Platinum
         </span>
       </div>
       <nav className="flex-1 space-y-1 p-2">

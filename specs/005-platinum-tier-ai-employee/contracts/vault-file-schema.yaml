@@ -1,0 +1,264 @@
+# Vault File Schema: Platinum Tier AI Employee
+# Defines the structure of all file-based contracts between Cloud and Local agents
+# Date: 2026-02-18
+
+# ==============================================================================
+# DRAFT FILES (Cloud → Local)
+# Location: Drafts/{type}/{draft-id}.md
+# Writer: Cloud agent only
+# ==============================================================================
+
+draft_schema:
+  frontmatter:
+    draft-id:
+      type: string
+      pattern: "^draft-(email-reply|social-post|payment|briefing)-\\d{4}-\\d{2}-\\d{2}-\\d{3}$"
+      required: true
+    type:
+      type: enum
+      values: [email-reply, social-post, payment, briefing]
+      required: true
+    priority:
+      type: enum
+      values: [high, medium, low]
+      required: true
+    created-at:
+      type: iso8601
+      required: true
+    expires-at:
+      type: iso8601
+      required: true
+      validation: "must equal created-at + 48 hours"
+    status:
+      type: enum
+      values: [pending, approved, rejected, expired]
+      required: true
+      default: pending
+    source:
+      type: object
+      required: false
+      properties:
+        email-id: { type: string }
+        from: { type: string }
+        subject: { type: string }
+        calendar-entry: { type: string }
+        invoice-id: { type: string }
+    context:
+      type: object
+      required: false
+      properties:
+        handbook-reference: { type: string }
+        contact-history: { type: string }
+        reasoning: { type: string }
+  body:
+    description: "Markdown content — the actual draft (reply text, post, payment instructions, or briefing)"
+    required: true
+
+# ==============================================================================
+# APPROVAL FILES (Local → Done)
+# Location: Approved/{approval-id}.md or Done/{approval-id}.md
+# Writer: Local agent only
+# ==============================================================================
+
+approval_schema:
+  frontmatter:
+    approval-id:
+      type: string
+      pattern: "^approval-\\d{4}-\\d{2}-\\d{2}-\\d{3}$"
+      required: true
+    draft-id:
+      type: string
+      required: true
+      validation: "must reference an existing draft"
+    decision:
+      type: enum
+      values: [approved, rejected]
+      required: true
+    feedback:
+      type: string
+      required: "only if decision is rejected"
+    decided-at:
+      type: iso8601
+      required: true
+    decided-by:
+      type: string
+      required: true
+    edits:
+      type: object
+      required: false
+      description: "Any modifications the CEO made to the draft content"
+
+# ==============================================================================
+# LEAD FILES (Cloud → Local)
+# Location: Needs_Action/cloud/leads/{lead-id}.md
+# Writer: Cloud agent creates; Local agent updates status
+# ==============================================================================
+
+lead_schema:
+  frontmatter:
+    lead-id:
+      type: string
+      pattern: "^lead-\\d{4}-\\d{2}-\\d{2}-\\d{3}$"
+      required: true
+    source-email:
+      type: string
+      required: true
+    company:
+      type: string
+      required: true
+    contact:
+      type: object
+      required: true
+      properties:
+        name: { type: string, required: true }
+        email: { type: string, required: true }
+        phone: { type: string, required: false }
+    request-type:
+      type: enum
+      values: [inquiry, rfp, partnership, support, other]
+      required: true
+    urgency:
+      type: enum
+      values: [high, medium, low]
+      required: true
+    status:
+      type: enum
+      values: [new, reviewed, contacted, qualified, closed]
+      required: true
+      default: new
+    created-at:
+      type: iso8601
+      required: true
+
+# ==============================================================================
+# AGENT IDENTITY FILES
+# Location: Signals/agents/{agent-id}.yaml
+# Writer: Each agent writes its own file
+# ==============================================================================
+
+agent_identity_schema:
+  agent-id:
+    type: string
+    required: true
+  zone:
+    type: enum
+    values: [cloud, local]
+    required: true
+  status:
+    type: enum
+    values: [running, stopped, degraded]
+    required: true
+  started-at:
+    type: iso8601
+    required: true
+  last-heartbeat:
+    type: iso8601
+    required: true
+    validation: "must be within 2x sync-interval of current time to be considered alive"
+  capabilities:
+    type: string[]
+    required: true
+  sync-interval:
+    type: integer
+    required: true
+    default: 300
+    unit: seconds
+  version:
+    type: string
+    required: true
+
+# ==============================================================================
+# HEALTH ALERT FILES
+# Location: Signals/health/{check-id}.yaml
+# Writer: Health monitor on each agent
+# ==============================================================================
+
+health_alert_schema:
+  check-id:
+    type: string
+    pattern: "^health-\\w+-\\d{4}-\\d{2}-\\d{2}T\\d{2}-\\d{2}-\\d{2}$"
+    required: true
+  agent-id:
+    type: string
+    required: true
+  service-name:
+    type: string
+    required: true
+  status:
+    type: enum
+    values: [degraded, down]
+    required: true
+  cpu-percent: { type: float, required: false }
+  memory-mb: { type: float, required: false }
+  disk-percent: { type: float, required: false }
+  api-reachable: { type: boolean, required: false }
+  action-taken: { type: string, required: false }
+  timestamp:
+    type: iso8601
+    required: true
+
+# ==============================================================================
+# SYNC CONFLICT ALERT FILES
+# Location: Signals/sync/{conflict-id}.yaml
+# Writer: vault-sync skill on conflict detection
+# ==============================================================================
+
+sync_conflict_schema:
+  conflict-id:
+    type: string
+    required: true
+  sync-id:
+    type: string
+    required: true
+  file-path:
+    type: string
+    required: true
+  cloud-version:
+    type: string
+    description: "Git commit hash of cloud version"
+  local-version:
+    type: string
+    description: "Git commit hash of local version"
+  resolution:
+    type: enum
+    values: [cloud_wins, local_wins, append_both, manual_required]
+    required: true
+  resolved:
+    type: boolean
+    required: true
+  timestamp:
+    type: iso8601
+    required: true
+
+# ==============================================================================
+# DIRECTORY WRITE PERMISSIONS
+# ==============================================================================
+
+write_permissions:
+  cloud:
+    allowed:
+      - "Needs_Action/cloud/**"
+      - "Drafts/**"
+      - "Signals/**"
+      - "Updates/**"
+      - "Logs/**"
+      - "audit/cloud-*"
+    denied:
+      - "Pending_Approval/**"
+      - "Approved/**"
+      - "Done/**"
+      - "Dashboard.md"
+  local:
+    allowed:
+      - "Pending_Approval/local/**"
+      - "Approved/**"
+      - "Done/**"
+      - "Dashboard.md"
+      - "Logs/**"
+      - "audit/local-*"
+      - "Needs_Action/cloud/leads/**"  # status updates only
+    denied:
+      - "Drafts/**"
+      - "Signals/**"
+      - "Updates/**"
+      - "Needs_Action/cloud/**"  # except leads status

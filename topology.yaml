@@ -1,0 +1,42 @@
+agents:
+  cloud:
+    skills:
+      - gmail-watcher
+      - health-monitor
+      - ceo-briefing-generator
+      - subscription-audit
+      - vault-sync
+      - draft-lifecycle
+    credential_scope: "readonly"
+
+  local:
+    skills:
+      - approval-manager
+      - email-sender-mcp
+      - social-poster-mcp
+      - payment-handler-mcp
+      - whatsapp-watcher
+      - invoice-generator
+      - vault-sync
+      - health-monitor
+    credential_scope: "full"
+
+conflict_resolution:
+  rules:
+    - path: "Dashboard.md"
+      strategy: "local_wins"
+    - path: "Drafts/**"
+      strategy: "cloud_wins"
+    - path: "Signals/**"
+      strategy: "cloud_wins"
+    - path: "Approved/**"
+      strategy: "local_wins"
+    - path: "Done/**"
+      strategy: "local_wins"
+    - path: "Logs/**/*.json"
+      strategy: "append_both"
+    - path: "audit/**"
+      strategy: "append_both"
+    - path: "Updates/**"
+      strategy: "cloud_wins"
+  default: "manual_required"

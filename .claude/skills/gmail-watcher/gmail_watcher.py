@@ -28,7 +28,7 @@ import json
 import os
 import re
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -61,11 +61,14 @@ class GmailWatcher(BaseWatcher):
     """
     Polls Gmail for unread emails labelled IMPORTANT and creates
     ``EMAIL_{message_id}.md`` markdown files in the vault's
-    ``Needs_Action/`` folder.
+    ``Needs_Action/`` folder (default) or ``Drafts/email/`` when
+    running in cloud zone with ``--output-drafts``.
     """
 
-    def __init__(self, vault_path: str, poll_interval: int = 120):
+    def __init__(self, vault_path: str, poll_interval: int = 120, output_drafts: bool = False):
         super().__init__("gmail", vault_path, poll_interval)
+
+        self.output_drafts = output_drafts
 
         # Load environment
         self._load_env()
@@ -76,6 +79,10 @@ class GmailWatcher(BaseWatcher):
         # Paths
         self.needs_action_dir = self.vault_path / "Needs_Action"
         self.needs_action_dir.mkdir(parents=True, exist_ok=True)
+
+        if self.output_drafts:
+            self.drafts_email_dir = self.vault_path / "Drafts" / "email"
+            self.drafts_email_dir.mkdir(parents=True, exist_ok=True)
 
         self.token_path = self._find_token_file()
         self.client_secret_path = self._find_client_secret_file()
@@ -366,11 +373,16 @@ class GmailWatcher(BaseWatcher):
     # ------------------------------------------------------------------
 
     def process_event(self, event: Dict[str, Any]) -> bool:
-        """Create an EMAIL_{message_id}.md file in Needs_Action/."""
+        """Create an EMAIL_{message_id}.md file in Needs_Action/ or Drafts/email/."""
+        if self.output_drafts:
+            return self._process_as_draft(event)
+        return self._process_as_needs_action(event)
+
+    def _process_as_needs_action(self, event: Dict[str, Any]) -> bool:
+        """Write to Needs_Action/ (original behavior)."""
         filename = f"EMAIL_{event['id']}.md"
         file_path = self.needs_action_dir / filename
 
-        # Idempotent — skip if file already exists
         if file_path.exists():
             self.logger.debug("File already exists, skipping: %s", filename)
             return True
@@ -387,6 +399,29 @@ class GmailWatcher(BaseWatcher):
             return True
         except OSError as exc:
             self.logger.error("Failed to write %s: %s", filename, exc)
+            return False
+
+    def _process_as_draft(self, event: Dict[str, Any]) -> bool:
+        """Write to Drafts/email/ with draft_schema frontmatter (cloud zone mode)."""
+        filename = f"draft-email-reply-{event['id']}.md"
+        file_path = self.drafts_email_dir / filename
+
+        if file_path.exists():
+            self.logger.debug("Draft already exists, skipping: %s", filename)
+            return True
+
+        try:
+            content = self._build_draft_markdown(event)
+            file_path.write_text(content, encoding="utf-8")
+            self.logger.info(
+                "Created draft %s — from: %s, subject: %s",
+                filename,
+                event["from_name"],
+                event["subject"],
+            )
+            return True
+        except OSError as exc:
+            self.logger.error("Failed to write draft %s: %s", filename, exc)
             return False
 
     def _build_markdown(self, event: Dict[str, Any]) -> str:
@@ -427,6 +462,61 @@ class GmailWatcher(BaseWatcher):
             f"- [ ] Archive this email\n"
         )
 
+    def _build_draft_markdown(self, event: Dict[str, Any]) -> str:
+        """Render an event as a Draft file with draft_schema frontmatter."""
+        received = event["received"]
+        if isinstance(received, datetime):
+            received_iso = received.isoformat()
+        else:
+            received_iso = str(received)
+
+        now = datetime.now(timezone.utc)
+        expires = now + timedelta(hours=48)
+        subject_escaped = str(event["subject"]).replace('"', '\\"')
+        draft_id = f"draft-email-reply-{event['id']}"
+
+        return (
+            f"---\n"
+            f"draft-id: {draft_id}\n"
+            f"type: email-reply\n"
+            f'priority: {event["priority"]}\n'
+            f"created-at: {now.isoformat()}\n"
+            f"expires-at: {expires.isoformat()}\n"
+            f"status: pending\n"
+            f"source:\n"
+            f'  message-id: {event["id"]}\n'
+            f'  thread-id: {event.get("thread_id", "")}\n'
+            f'  from: {event["from_email"]}\n'
+            f'  from-name: {event["from_name"]}\n'
+            f'  subject: "{subject_escaped}"\n'
+            f"  received: {received_iso}\n"
+            f"approval_required: true\n"
+            f"---\n"
+            f"\n"
+            f'## Draft Reply to: {event["subject"]}\n'
+            f"\n"
+            f'**From:** {event["from_name"]} <{event["from_email"]}>\n'
+            f"**Received:** {received_iso}\n"
+            f'**Priority:** {event["priority"]}\n'
+            f"\n"
+            f"### Original Message\n"
+            f"\n"
+            f'{event["body_snippet"]}\n'
+            f"\n"
+            f"### Suggested Reply\n"
+            f"\n"
+            f'Hi {event["from_name"].split()[0] if event["from_name"] else "there"},\n'
+            f"\n"
+            f"Thank you for your email regarding \"{event['subject']}\".\n"
+            f"\n"
+            f"[SPECIFIC_DETAILS]\n"
+            f"\n"
+            f"[DECISION]\n"
+            f"\n"
+            f"Best regards,\n"
+            f"[YOUR_NAME]\n"
+        )
+
 
 # ------------------------------------------------------------------
 # CLI entry-point
@@ -452,9 +542,23 @@ def main() -> None:
         action="store_true",
         help="Run a single poll cycle and exit",
     )
+    parser.add_argument(
+        "--output-drafts",
+        action="store_true",
+        help="Write to Drafts/email/ with draft_schema frontmatter (cloud zone mode)",
+    )
+    parser.add_argument(
+        "--monitor",
+        action="store_true",
+        help="Alias for continuous polling (same as default, omit --once)",
+    )
     args = parser.parse_args()
 
-    watcher = GmailWatcher(vault_path=args.vault_path, poll_interval=args.interval)
+    watcher = GmailWatcher(
+        vault_path=args.vault_path,
+        poll_interval=args.interval,
+        output_drafts=args.output_drafts,
+    )
 
     if args.once:
         events = watcher.detect_events()

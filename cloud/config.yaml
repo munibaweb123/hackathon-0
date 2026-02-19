@@ -1,0 +1,110 @@
+agent:
+  id: "cloud-001"
+  zone: "cloud"
+  version: "1.0.0"
+
+vault:
+  path: "../obsidian-vault"
+  git_remote: "origin"
+  sync_interval_seconds: 300
+  sync_on_startup: true
+
+credentials:
+  store_path: "./credentials/readonly-tokens.enc"
+  encryption_key_env: "CREDENTIAL_KEY"
+  allowed_scopes:
+    gmail: "gmail.readonly"
+    linkedin: "r_liteprofile,r_organization_social"
+    twitter: "tweet.read,users.read"
+    facebook: "pages_read_engagement"
+
+processes:
+  - name: "gmail-watcher"
+    skill: "gmail-watcher"
+    command: "uv run ../.claude/skills/gmail-watcher/gmail_watcher.py --vault-path {vault} --monitor --output-drafts"
+    enabled: true
+    restart_on_failure: true
+    max_restarts: 3
+    backoff_base_seconds: 30
+
+  - name: "health-monitor"
+    skill: "health-monitor"
+    command: "uv run ../.claude/skills/health-monitor/health_monitor.py --vault-path {vault} --monitor"
+    enabled: true
+    restart_on_failure: true
+    max_restarts: 5
+    backoff_base_seconds: 10
+
+  - name: "vault-sync"
+    skill: "vault-sync"
+    command: "uv run ../.claude/skills/vault-sync/vault_sync.py --vault-path {vault} --monitor"
+    enabled: true
+    restart_on_failure: true
+    max_restarts: 10
+    backoff_base_seconds: 15
+
+  - name: "draft-expiration-sweeper"
+    skill: "draft-lifecycle"
+    command: "uv run ../agent-skills/core/draft_lifecycle.py --vault-path {vault} --sweep"
+    enabled: true
+    schedule: "0 * * * *"
+
+schedules:
+  - name: "monday-briefing"
+    skill: "ceo-briefing-generator"
+    command: "uv run ../.claude/skills/ceo-briefing-generator/briefing_generator.py --vault-path {vault} --once"
+    cron: "0 7 * * 1"
+    enabled: true
+
+  - name: "subscription-audit"
+    skill: "subscription-audit"
+    command: "uv run ../.claude/skills/subscription-audit/subscription_audit.py --vault-path {vault}"
+    cron: "0 8 1 * *"
+    enabled: true
+
+  - name: "social-draft-generation"
+    skill: "social-draft-generator"
+    command: "uv run ../agent-skills/core/social_draft_generator.py --vault-path {vault} --generate"
+    cron: "0 9 * * 1,3,5"
+    enabled: true
+    description: "Generate social media drafts Mon/Wed/Fri at 9am"
+
+  - name: "invoice-due-scan"
+    skill: "payment-draft-creator"
+    command: "uv run ../agent-skills/core/payment_draft_creator.py --vault-path {vault} --scan-due"
+    cron: "0 8 * * *"
+    enabled: true
+    description: "Scan for invoices due within 3 days"
+
+  - name: "health-check-periodic"
+    skill: "health-monitor"
+    command: "uv run ../.claude/skills/health-monitor/health_monitor.py --vault-path {vault} --once"
+    cron: "0 */2 * * *"
+    enabled: true
+    description: "Periodic sync health check every 2 hours"
+
+security:
+  write_allowed_paths:
+    - "Needs_Action/cloud/"
+    - "Drafts/"
+    - "Signals/"
+    - "Updates/"
+    - "Logs/"
+    - "audit/cloud-"
+  write_denied_paths:
+    - "Pending_Approval/"
+    - "Approved/"
+    - "Done/"
+    - "Dashboard.md"
+
+health:
+  check_interval_seconds: 60
+  cpu_threshold_percent: 80
+  memory_threshold_percent: 80
+  disk_threshold_percent: 90
+  alert_path: "Signals/health/"
+
+logging:
+  level: "INFO"
+  audit_log: "audit/cloud-audit.jsonl"
+  sync_log: "Logs/sync/"

@@ -40,6 +40,11 @@ schedules:
     cron: "0 */2 * * *"
     command: "uv run .claude/skills/health-monitor/health_monitor.py --vault-path {vault} --once"
     enabled: true
+  task-detection:
+    description: "Scan for complex tasks needing decomposition"
+    cron: "*/15 * * * *"
+    command: "uv run .claude/skills/task-planner/task_planner.py --vault-path {vault} --detect"
+    enabled: true
 
 task_processing:
   poll_interval: 10

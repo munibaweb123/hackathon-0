@@ -326,13 +326,55 @@ class BriefingGenerator:
         return template.render(**data)
 
     def _save_briefing(self, rendered: str, week_start: date) -> Path:
-        """Save rendered briefing to Briefings/{date}_Monday_Briefing.md."""
+        """
+        Save rendered briefing.
+
+        When running in draft mode (--output-drafts), writes to
+        Drafts/briefings/ with draft_schema frontmatter so the approval
+        workflow can review before delivery.  Otherwise writes directly
+        to Briefings/.
+        """
+        if getattr(self, "_output_drafts", False):
+            return self._save_as_draft(rendered, week_start)
+
         briefings_dir = self.vault / "Briefings"
         briefings_dir.mkdir(parents=True, exist_ok=True)
 
         filename = f"{week_start.isoformat()}_Monday_Briefing.md"
         output_path = briefings_dir / filename
         output_path.write_text(rendered, encoding="utf-8")
+        return output_path
+
+    def _save_as_draft(self, rendered: str, week_start: date) -> Path:
+        """Save briefing as a draft in Drafts/briefings/ with frontmatter."""
+        import uuid
+
+        drafts_dir = self.vault / "Drafts" / "briefings"
+        drafts_dir.mkdir(parents=True, exist_ok=True)
+
+        now = datetime.now(timezone.utc)
+        draft_id = f"draft-briefing-{week_start.isoformat()}-{uuid.uuid4().hex[:8]}"
+        expires = now + timedelta(hours=48)
+
+        frontmatter = (
+            "---\n"
+            f"draft-id: {draft_id}\n"
+            f"type: briefing\n"
+            f"priority: medium\n"
+            f"created-at: {now.strftime('%Y-%m-%dT%H:%M:%SZ')}\n"
+            f"expires-at: {expires.strftime('%Y-%m-%dT%H:%M:%SZ')}\n"
+            f"status: pending\n"
+            f"week-start: {week_start.isoformat()}\n"
+            f"approval_required: true\n"
+            f"source:\n"
+            f"  agent: cloud-001\n"
+            f"  skill: ceo-briefing-generator\n"
+            "---\n\n"
+        )
+
+        filename = f"{week_start.isoformat()}_Monday_Briefing.md"
+        output_path = drafts_dir / filename
+        output_path.write_text(frontmatter + rendered, encoding="utf-8")
         return output_path
 
     def _log_generation(self, week_start: date, status: str, output_path: Path) -> None:
@@ -383,6 +425,11 @@ def main() -> None:
         help="Generate a single briefing and exit (default behavior)",
     )
     parser.add_argument(
+        "--output-drafts",
+        action="store_true",
+        help="Write output to Drafts/briefings/ with draft_schema frontmatter",
+    )
+    parser.add_argument(
         "--verbose", "-v",
         action="store_true",
         help="Enable verbose logging",
@@ -405,6 +452,7 @@ def main() -> None:
     )
 
     generator = BriefingGenerator(vault_path=args.vault_path)
+    generator._output_drafts = args.output_drafts
     result = generator.generate(week_start=args.week_start)
 
     print(f"\nCEO Briefing generated successfully!")

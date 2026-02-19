@@ -214,6 +214,8 @@ See `.specify/memory/constitution.md` for code quality, testing, performance, se
 - File-based (Obsidian vault structure) — no database required (003-silver-tier-assistant)
 - Python 3.8+ (backend), TypeScript/Node.js (Next.js 16 dashboard) (004-gold-tier-autonomous)
 - File-based (Obsidian vault YAML/JSON/Markdown) (004-gold-tier-autonomous)
+- Python 3.10+ (agents, skills, watchers), TypeScript/Node.js (Next.js 16 dashboard) + watchdog, google-api-python-client, playwright, anthropic, apscheduler, PyYAML, FastAPI, uvicorn, httpx, gitpython (005-platinum-tier-ai-employee)
+- File-based (Obsidian vault — YAML/JSON/Markdown). No database. (005-platinum-tier-ai-employee)
 
 ## Recent Changes
 - 003-silver-tier-assistant: Added Python 3.8+ (backend/watchers), TypeScript/Node.js (Next.js 16 dashboard)
