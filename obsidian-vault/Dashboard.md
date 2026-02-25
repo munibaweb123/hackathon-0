@@ -94,28 +94,27 @@ uv run silver/start_silver.py --stop
 
 ## Orchestrator Status
 
-**Mode:** DRY RUN | **Last Cycle:** 2026-02-19 02:13 UTC | **Total Cycles:** 0
+**Mode:** DRY RUN | **Last Cycle:** 2026-02-25 20:08 UTC | **Total Cycles:** 0
 
 | Metric | Value |
 |--------|-------|
-| Queue Depth | 1 |
-| Tasks Processed | 1 |
+| Queue Depth | 8 |
+| Tasks Processed | 3 |
 | Tasks Failed | 0 |
 | Schedules | 5 |
 | Poll Interval | 10s |
-
 ## System Health
 
-**Status:** UNHEALTHY | **Last Check:** 2026-02-19 02:13 UTC
+**Status:** UNHEALTHY | **Last Check:** 2026-02-25 20:08 UTC
 
 | Component | Status | Uptime | Last Check |
 |-----------|--------|--------|------------|
-| gmail-watcher | DOWN | not running | 2026-02-19 02:13 UTC |
-| whatsapp-watcher | DOWN | not running | 2026-02-19 02:13 UTC |
-| filesystem-watcher | DOWN | not running | 2026-02-19 02:13 UTC |
-| approval-manager | DOWN | not running | 2026-02-19 02:13 UTC |
-| vault-sync | DOWN | not running | 2026-02-19 02:13 UTC |
+| gmail-watcher | DOWN | not running | 2026-02-25 20:08 UTC |
+| whatsapp-watcher | DOWN | not running | 2026-02-25 20:08 UTC |
+| filesystem-watcher | DOWN | not running | 2026-02-25 20:08 UTC |
+| approval-manager | DOWN | not running | 2026-02-25 20:08 UTC |
+| vault-sync | DOWN | not running | 2026-02-25 20:08 UTC |
 
-**Resources:** Disk 3.5% | Memory 27.8% | CPU 22.9%
+**Resources:** Disk 3.6% | Memory 22.4% | CPU 19.6%
 
-**Alerts:** 1 active
+**Alerts:** 2 active
