@@ -94,12 +94,12 @@ uv run silver/start_silver.py --stop
 
 ## Orchestrator Status
 
-**Mode:** DRY RUN | **Last Cycle:** 2026-02-25 20:08 UTC | **Total Cycles:** 0
+**Mode:** DRY RUN | **Last Cycle:** 2026-02-25 20:59 UTC | **Total Cycles:** 0
 
 | Metric | Value |
 |--------|-------|
-| Queue Depth | 8 |
-| Tasks Processed | 3 |
+| Queue Depth | 1 |
+| Tasks Processed | 1 |
 | Tasks Failed | 0 |
 | Schedules | 5 |
 | Poll Interval | 10s |
@@ -118,3 +118,17 @@ uv run silver/start_silver.py --stop
 **Resources:** Disk 3.6% | Memory 22.4% | CPU 19.6%
 
 **Alerts:** 2 active
+
+
+## Approval Manager Status
+
+| Metric | Value |
+|--------|-------|
+| Pending Approvals | 0 |
+| Expiring Soon (<4h) | 0 |
+| Last Updated | 2026-02-25 20:09 UTC |
+
+### Recent Decisions
+
+- (none)
+
