@@ -34,6 +34,7 @@ class ReasoningLoop:
     ):
         self.vault = vault_interface
         self.logger = logger
+        self.gemini_key = os.environ.get("GEMINI_API_KEY", "")
         self.api_key = api_key or os.environ.get("ANTHROPIC_API_KEY", "")
         self.model = model
         self.dry_run = dry_run
@@ -41,26 +42,55 @@ class ReasoningLoop:
         self._client = None
 
     def _get_client(self):
-        """Lazy-initialize the Anthropic client."""
+        """Lazy-initialize AI client — Gemini preferred, Anthropic fallback."""
         if self._client is None:
+            # Try Gemini first (free tier)
+            if self.gemini_key and self.gemini_key != "your_gemini_api_key_here":
+                try:
+                    from google import genai
+                    self._client = genai.Client(api_key=self.gemini_key)
+                    self._client_type = "gemini"
+                    return self._client
+                except Exception:
+                    pass
+            # Fallback to Anthropic
             try:
                 import anthropic
                 self._client = anthropic.Anthropic(api_key=self.api_key)
+                self._client_type = "anthropic"
             except ImportError:
                 self.logger.log_system_event(
                     event_type="reasoning_error",
                     component="reasoning_loop",
-                    message="anthropic package not installed",
+                    message="No AI client available (install google-generativeai or anthropic)",
                 )
                 return None
             except Exception as e:
                 self.logger.log_system_event(
                     event_type="reasoning_error",
                     component="reasoning_loop",
-                    message=f"Failed to initialize Anthropic client: {e}",
+                    message=f"Failed to initialize AI client: {e}",
                 )
                 return None
         return self._client
+
+    def _call_ai(self, prompt: str) -> str:
+        """Call AI with prompt, returning response text."""
+        client = self._get_client()
+        if client is None:
+            return ""
+        if getattr(self, "_client_type", "anthropic") == "gemini":
+            response = client.models.generate_content(
+                model="models/gemini-flash-latest", contents=prompt
+            )
+            return response.text.strip()
+        else:
+            msg = client.messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=1024,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            return msg.content[0].text.strip()
 
     def get_unprocessed_events(self) -> List[Dict[str, Any]]:
         """Get all unprocessed events from the inbox."""

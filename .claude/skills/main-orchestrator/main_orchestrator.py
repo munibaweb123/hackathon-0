@@ -2,6 +2,7 @@
 # requires-python = ">=3.10"
 # dependencies = [
 #     "pyyaml>=6.0",
+#     "google-genai>=1.0.0",
 # ]
 # ///
 """
@@ -400,65 +401,79 @@ class MainOrchestrator:
         )
 
     # ------------------------------------------------------------------
-    # Claude CLI invocation
+    # AI invocation (Gemini API, with Anthropic fallback)
     # ------------------------------------------------------------------
     def _invoke_claude(self, prompt: str, task: Dict[str, Any]) -> bool:
         """
-        Invoke Claude CLI to process a task.
+        Invoke Gemini API (or Anthropic fallback) to process a task.
 
-        In dry_run mode, logs the prompt but doesn't execute.
+        Priority: GEMINI_API_KEY → ANTHROPIC_API_KEY → dry_run log.
 
         Returns:
             True if successful.
         """
-        if self.dry_run:
-            logger.info(
-                "[DRY RUN] Would invoke Claude for: %s (prompt: %d chars)",
-                task["filename"],
-                len(prompt),
-            )
-            return True
+        gemini_key = os.environ.get("GEMINI_API_KEY", "")
+        anthropic_key = os.environ.get("ANTHROPIC_API_KEY", "")
 
+        # Load from .env file if not in environment
+        if not gemini_key or not anthropic_key:
+            env_path = self.project_root / ".env"
+            if env_path.exists():
+                for line in env_path.read_text().splitlines():
+                    if line.startswith("GEMINI_API_KEY=") and not gemini_key:
+                        gemini_key = line.split("=", 1)[1].strip()
+                    elif line.startswith("ANTHROPIC_API_KEY=") and not anthropic_key:
+                        anthropic_key = line.split("=", 1)[1].strip()
+
+        # Try Gemini first
+        if gemini_key and gemini_key != "your_gemini_api_key_here":
+            return self._invoke_gemini(prompt, task, gemini_key)
+
+        # Try Anthropic fallback
+        if anthropic_key and anthropic_key != "your_anthropic_api_key_here":
+            return self._invoke_anthropic(prompt, task, anthropic_key)
+
+        # No valid key — dry run log
+        logger.info(
+            "[DRY RUN] No AI key set. Would process: %s (prompt: %d chars)",
+            task["filename"],
+            len(prompt),
+        )
+        return True
+
+    def _invoke_gemini(self, prompt: str, task: Dict[str, Any], api_key: str) -> bool:
+        """Call Gemini API to process a task."""
         try:
-            proc = subprocess.run(
-                [self.claude_command, "-p", prompt],
-                capture_output=True,
-                text=True,
-                timeout=self.claude_timeout,
-                cwd=str(self.project_root),
+            from google import genai
+            client = genai.Client(api_key=api_key)
+            response = client.models.generate_content(
+                model="models/gemini-flash-latest",
+                contents=prompt,
             )
-
-            if proc.returncode == 0:
-                # Save Claude's response
-                response = proc.stdout.strip()
-                self._save_claude_response(task, response)
-                logger.info(
-                    "Claude processed %s (%d chars response)",
-                    task["filename"],
-                    len(response),
-                )
-                return True
-            else:
-                logger.error(
-                    "Claude failed for %s (exit %d): %s",
-                    task["filename"],
-                    proc.returncode,
-                    proc.stderr.strip()[:200],
-                )
-                return False
-
-        except subprocess.TimeoutExpired:
-            logger.error(
-                "Claude timed out for %s (%ds)",
-                task["filename"],
-                self.claude_timeout,
-            )
-            return False
-        except FileNotFoundError:
-            logger.error("Claude CLI not found: %s", self.claude_command)
-            return False
+            text = response.text.strip()
+            self._save_claude_response(task, text)
+            logger.info("Gemini processed %s (%d chars)", task["filename"], len(text))
+            return True
         except Exception as e:
-            logger.error("Claude invocation error: %s", e)
+            logger.error("Gemini invocation error for %s: %s", task["filename"], e)
+            return False
+
+    def _invoke_anthropic(self, prompt: str, task: Dict[str, Any], api_key: str) -> bool:
+        """Call Anthropic API as fallback."""
+        try:
+            import anthropic
+            client = anthropic.Anthropic(api_key=api_key)
+            msg = client.messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=1024,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            text = msg.content[0].text.strip()
+            self._save_claude_response(task, text)
+            logger.info("Anthropic processed %s (%d chars)", task["filename"], len(text))
+            return True
+        except Exception as e:
+            logger.error("Anthropic invocation error for %s: %s", task["filename"], e)
             return False
 
     def _save_claude_response(self, task: Dict[str, Any], response: str) -> None:
